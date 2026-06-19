@@ -3,49 +3,109 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Block Blast</title>
+  <title>Spielhalle</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Animated background -->
   <canvas id="bg-canvas"></canvas>
-  <!-- Floating score popups -->
   <div id="popup-layer"></div>
 
-  <div id="app">
-    <header>
-      <h1>Block<br>Blast</h1>
-      <div id="score-area">
-        <div class="score-box">
-          <span class="label">Punkte</span>
-          <span id="score">0</span>
-        </div>
-        <div class="score-box best">
-          <span class="label">Rekord</span>
-          <span id="highscore">0</span>
-        </div>
+  <!-- ══ Home Screen ══════════════════════════════════════════════════ -->
+  <div id="home-screen" class="screen">
+    <div class="screen-inner home-inner">
+      <div id="home-logo">
+        <span class="logo-emoji">🎮</span>
+        <h1 id="home-title">Spielhalle</h1>
+        <p id="home-sub">Wähle ein Spiel</p>
       </div>
-    </header>
+      <div id="game-cards">
+        <button class="game-card" id="card-blockblast">
+          <span class="card-icon">🧱</span>
+          <span class="card-name">Block Blast</span>
+          <span class="card-desc">Stapel Blöcke &amp; lösche Reihen</span>
+        </button>
+        <button class="game-card" id="card-tictactoe">
+          <span class="card-icon">⭕</span>
+          <span class="card-name">Tic Tac Toe</span>
+          <span class="card-desc">Drei in einer Reihe gewinnt</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
-    <main>
-      <div id="grid-wrapper">
-        <canvas id="grid-canvas"></canvas>
-        <div id="overlay" class="hidden">
-          <div id="overlay-content">
-            <div id="overlay-emoji">💥</div>
-            <h2>Spiel vorbei!</h2>
-            <p>Punkte: <strong id="final-score">0</strong></p>
-            <button id="restart-btn">Nochmal spielen</button>
+  <!-- ══ Block Blast Screen ════════════════════════════════════════════ -->
+  <div id="blockblast-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="bb-back" title="Zurück zur Spielhalle">🏠</button>
+        <h1 class="game-title">Block<br>Blast</h1>
+        <div id="score-area">
+          <div class="score-box">
+            <span class="label">Punkte</span>
+            <span id="score">0</span>
+          </div>
+          <div class="score-box best">
+            <span class="label">Rekord</span>
+            <span id="highscore">0</span>
           </div>
         </div>
+      </header>
+
+      <main id="bb-main">
+        <div id="grid-wrapper">
+          <canvas id="grid-canvas"></canvas>
+          <div id="overlay" class="hidden">
+            <div id="overlay-content">
+              <div id="overlay-emoji">💥</div>
+              <h2>Spiel vorbei!</h2>
+              <p>Punkte: <strong id="final-score">0</strong></p>
+              <div id="overlay-btns">
+                <button id="restart-btn">Nochmal</button>
+                <button id="bb-home-btn">🏠 Spielhalle</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="piece-tray">
+          <div class="piece-slot"><canvas id="piece-0" class="piece-canvas"></canvas></div>
+          <div class="piece-slot"><canvas id="piece-1" class="piece-canvas"></canvas></div>
+          <div class="piece-slot"><canvas id="piece-2" class="piece-canvas"></canvas></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ══ Tic Tac Toe Screen ════════════════════════════════════════════ -->
+  <div id="tictactoe-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="ttt-back" title="Zurück zur Spielhalle">🏠</button>
+        <h1 class="game-title">Tic Tac<br>Toe</h1>
+        <div id="ttt-mode-btns">
+          <button id="mode-ai" class="mode-btn active">🤖 KI</button>
+          <button id="mode-2p" class="mode-btn">👥 2P</button>
+        </div>
+      </header>
+
+      <div id="ttt-scores">
+        <div class="score-box x-box">
+          <span class="label" id="ttt-x-label">Spieler X</span>
+          <span id="ttt-score-x">0</span>
+        </div>
+        <div class="score-box d-box">
+          <span class="label">Remis</span>
+          <span id="ttt-score-d">0</span>
+        </div>
+        <div class="score-box o-box">
+          <span class="label" id="ttt-o-label">Computer</span>
+          <span id="ttt-score-o">0</span>
+        </div>
       </div>
 
-      <div id="piece-tray">
-        <div class="piece-slot"><canvas id="piece-0" class="piece-canvas"></canvas></div>
-        <div class="piece-slot"><canvas id="piece-1" class="piece-canvas"></canvas></div>
-        <div class="piece-slot"><canvas id="piece-2" class="piece-canvas"></canvas></div>
-      </div>
-    </main>
+      <div id="ttt-status">Spieler X ist dran</div>
+      <canvas id="ttt-canvas"></canvas>
+      <button id="ttt-restart" class="action-btn">↺ Neue Runde</button>
+    </div>
   </div>
 
   <canvas id="drag-canvas"></canvas>
