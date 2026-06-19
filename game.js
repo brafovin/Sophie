@@ -69,6 +69,7 @@ function goHome() {
   if (typeof stopSnake     === 'function') stopSnake();
   if (typeof stopBreakout  === 'function') stopBreakout();
   if (typeof stopObby      === 'function') stopObby();
+  if (typeof stopBlox      === 'function') stopBlox();
   showScreen('home-screen');
 }
 
@@ -79,6 +80,7 @@ document.getElementById('card-planet')    .addEventListener('click',()=>{showScr
 document.getElementById('card-snake')     .addEventListener('click',()=>{showScreen('snake-screen');     startSnake();});
 document.getElementById('card-breakout')  .addEventListener('click',()=>{showScreen('breakout-screen'); startBreakout();});
 document.getElementById('card-obby')      .addEventListener('click',()=>{showScreen('obby-screen');     startObby();});
+document.getElementById('card-blox')      .addEventListener('click',()=>{showScreen('blox-screen');     startBlox();});
 
 document.querySelectorAll('.back-btn').forEach(b=>b.addEventListener('click',goHome));
 document.getElementById('bb-home-btn').addEventListener('click',goHome);

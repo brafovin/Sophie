@@ -54,6 +54,11 @@
           <span class="card-name">Obby Run</span>
           <span class="card-desc">Lauf! Die Lava steigt!</span>
         </button>
+        <button class="game-card" id="card-blox">
+          <span class="card-icon">🏗️</span>
+          <span class="card-name">Blox World</span>
+          <span class="card-desc">Isometrisches 3D-Abenteuer!</span>
+        </button>
       </div>
     </div>
   </div>
@@ -222,6 +227,30 @@
     </div>
   </div>
 
+  <!-- ══ Blox World Screen ════════════════════════════════════════════════ -->
+  <div id="blox-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="blox-back">🏠</button>
+        <h1 class="game-title">Blox<br>World</h1>
+        <div id="blox-hud">
+          <div class="score-box"><span class="label">Punkte</span><span id="blox-score">0</span></div>
+          <div class="score-box"><span class="label">Leben</span><span id="blox-lives">❤️❤️❤️</span></div>
+        </div>
+      </header>
+      <canvas id="blox-canvas"></canvas>
+      <div id="blox-dpad">
+        <div class="dpad-row"><button class="ctrl-btn" id="blox-up">▲</button></div>
+        <div class="dpad-row">
+          <button class="ctrl-btn" id="blox-left">◀</button>
+          <button class="ctrl-btn blox-jump-btn" id="blox-jump">⬆ Sprung</button>
+          <button class="ctrl-btn" id="blox-right">▶</button>
+        </div>
+        <div class="dpad-row"><button class="ctrl-btn" id="blox-down">▼</button></div>
+      </div>
+    </div>
+  </div>
+
   <canvas id="drag-canvas"></canvas>
   <script src="game.js"></script>
   <script src="runner.js"></script>
@@ -229,5 +258,6 @@
   <script src="snake.js"></script>
   <script src="breakout.js"></script>
   <script src="obby.js"></script>
+  <script src="blox.js"></script>
 </body>
 </html>
