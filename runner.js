@@ -14,6 +14,8 @@
   let obstacles, coins, rain, splashes, particles;
   let score, speed, frame, spawnTimer, bgOffset;
   let deadTimer;
+  let lives, invincible, invincTimer, newBest;
+  let highScore = parseInt(localStorage.getItem('runner_hs') || '0');
 
   /* ── Neon sign palette ────────────────────────────────────────────── */
   const SIGNS = [
@@ -52,6 +54,7 @@
     lane = 1; charY = LANES[1]; jumpV = 0; jumping = false;
     obstacles = []; coins = []; particles = []; splashes = [];
     score = 0; speed = 3; frame = 0; spawnTimer = 0; bgOffset = 0; deadTimer = -1;
+    lives = 3; invincible = false; invincTimer = 0; newBest = false;
     scoreEl.textContent = '0';
     rain = Array.from({length: 80}, () => ({
       x: Math.random() * W, y: Math.random() * H,
@@ -425,12 +428,26 @@
 
   /* ══ HUD ════════════════════════════════════════════════════════════ */
   function drawHud() {
-    // Score panel
     ctx.save();
-    ctx.fillStyle='rgba(0,0,0,0.4)';
-    ctx.beginPath(); ctx.roundRect(4,4,105,24,6); ctx.fill();
+    // Score + lives panel
+    ctx.fillStyle='rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(4,4,120,36,6); ctx.fill();
     ctx.fillStyle='#fff'; ctx.font='bold 13px monospace';
-    ctx.fillText(`${score} PTS`, 10, 21);
+    ctx.fillText(`${score} PTS`, 10, 19);
+    // Lives
+    ctx.font='12px sans-serif';
+    for(let i=0;i<3;i++){
+      ctx.fillStyle = i < lives ? '#ef4444' : 'rgba(255,255,255,0.18)';
+      ctx.shadowColor = i < lives ? '#ff4444' : 'transparent';
+      ctx.shadowBlur = i < lives ? 6 : 0;
+      ctx.fillText('♥', 10 + i*18, 34);
+    }
+    ctx.shadowBlur=0;
+    // High score
+    if(highScore>0){
+      ctx.fillStyle='rgba(255,220,80,0.65)'; ctx.font='8px monospace';
+      ctx.fillText(`BEST:${highScore}`, 65, 34);
+    }
     // Speed bar
     const bw=80,bh=5,bx=W-bw-8,by=6;
     ctx.fillStyle='rgba(0,0,0,0.4)';
@@ -450,21 +467,30 @@
 
   /* ══ DEAD OVERLAY ═══════════════════════════════════════════════════ */
   function drawDead() {
-    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
-    // Glitch lines
+    ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H);
     for(let i=0;i<5;i++){
-      ctx.fillStyle=`rgba(255,0,80,0.15)`;
+      ctx.fillStyle=`rgba(255,0,80,0.14)`;
       ctx.fillRect(0, 40+i*40+Math.sin(deadTimer*0.3+i)*8, W, 6);
     }
     ctx.textAlign='center';
+    if(newBest){
+      ctx.shadowColor='#ffd740'; ctx.shadowBlur=18;
+      ctx.fillStyle='#ffd740'; ctx.font='bold 13px monospace';
+      ctx.fillText('✨ NEUER REKORD!', W/2, H/2-48);
+      ctx.shadowBlur=0;
+    }
     ctx.shadowColor='#ff2d78'; ctx.shadowBlur=20;
     ctx.fillStyle='#ff2d78'; ctx.font='bold 28px monospace';
     ctx.fillText('GAME OVER', W/2, H/2-22);
     ctx.shadowBlur=0;
     ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.font='14px monospace';
     ctx.fillText(`SCORE: ${score}`, W/2, H/2+8);
-    ctx.fillStyle='rgba(200,200,200,0.6)'; ctx.font='11px monospace';
-    ctx.fillText('TAP TO RESTART', W/2, H/2+32);
+    if(highScore>0&&!newBest){
+      ctx.fillStyle='rgba(255,220,80,0.7)'; ctx.font='11px monospace';
+      ctx.fillText(`BEST: ${highScore}`, W/2, H/2+26);
+    }
+    ctx.fillStyle='rgba(200,200,200,0.55)'; ctx.font='11px monospace';
+    ctx.fillText('TAP TO RESTART', W/2, H/2+(newBest||highScore>0?46:32));
     ctx.textAlign='left';
   }
 
@@ -540,15 +566,26 @@
       }
     });
 
+    // Invincibility countdown
+    if(invincible){ invincTimer--; if(invincTimer<=0) invincible=false; }
+
     // Obstacle collision
-    for (const ob of obstacles) {
-      const h = ob.type==='tall'?44:ob.type==='car'?22:30;
-      const oy = laneY(ob.lane);
-      const hw = ob.type==='car'?22:15;
-      if (Math.abs(CHAR_X-ob.x)<hw+6 && charY-14<oy+10 && charY+10>oy-h){
-        addParticles(CHAR_X,charY,'#ff2d78',14);
-        addParticles(CHAR_X,charY,'#fbbf24',8);
-        deadTimer=0; return;
+    if(!invincible){
+      for (const ob of obstacles) {
+        const h = ob.type==='tall'?44:ob.type==='car'?22:30;
+        const oy = laneY(ob.lane);
+        const hw = ob.type==='car'?22:15;
+        if (Math.abs(CHAR_X-ob.x)<hw+6 && charY-14<oy+10 && charY+10>oy-h){
+          addParticles(CHAR_X,charY,'#ff2d78',10);
+          lives--;
+          if(lives<=0){
+            addParticles(CHAR_X,charY,'#fbbf24',8);
+            newBest = score>highScore;
+            if(newBest){highScore=score;localStorage.setItem('runner_hs',highScore);}
+            deadTimer=0; return;
+          }
+          invincible=true; invincTimer=120; break;
+        }
       }
     }
 
@@ -558,7 +595,7 @@
     coins.forEach(drawCoin);
     obstacles.forEach(drawObstacle);
     drawParticles();
-    drawChar(CHAR_X,charY,false);
+    if(!invincible || Math.floor(invincTimer/8)%2===0) drawChar(CHAR_X,charY,false);
     drawHud();
   }
 

@@ -9,11 +9,12 @@
 
   let raf, running = false;
   let snake, dir, nextDir, foods, score, speed, tickTimer;
-  let dead, deadAlpha;
+  let dead, deadAlpha, paused, newBest;
   let particles, fireflies, glowPulse;
   let tonguePhase;
   let combo, comboTimer;
   let frame = 0;
+  let highScore = parseInt(localStorage.getItem('snake_hs') || '0');
 
   /* ── Resize ───────────────────────────────────────────────────────── */
   function resize() {
@@ -43,7 +44,7 @@
     snake     = [{ x:mid,y:mid},{x:mid-1,y:mid},{x:mid-2,y:mid}];
     dir       = {x:1,y:0}; nextDir = {x:1,y:0};
     score     = 0; speed = 150; tickTimer = 0;
-    dead      = false; deadAlpha = 0;
+    dead      = false; deadAlpha = 0; paused = false; newBest = false;
     particles = []; fireflies = []; glowPulse = 0;
     tonguePhase = 0; combo = 0; comboTimer = 0; frame = 0;
     scoreEl.textContent = '0';
@@ -309,29 +310,64 @@
 
   /* ══ DEAD OVERLAY ═══════════════════════════════════════════════════ */
   function drawDead() {
-    // Red tint fade
-    ctx.fillStyle=`rgba(100,0,0,${deadAlpha*0.5})`;
-    ctx.fillRect(0,0,W,H);
-    // Dark overlay
-    ctx.fillStyle=`rgba(0,0,0,${deadAlpha*0.65})`;
-    ctx.fillRect(0,0,W,H);
-    if(deadAlpha<0.5)return;
+    ctx.fillStyle=`rgba(100,0,0,${deadAlpha*0.5})`; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=`rgba(0,0,0,${deadAlpha*0.65})`; ctx.fillRect(0,0,W,H);
+    if(deadAlpha<0.5) return;
     ctx.globalAlpha=Math.min(1,(deadAlpha-0.5)*2);
     ctx.textAlign='center';
+    if(newBest){
+      ctx.shadowColor='#ffd740'; ctx.shadowBlur=16;
+      ctx.fillStyle='#ffd740'; ctx.font=`bold ${Math.round(CELL*0.95)}px monospace`;
+      ctx.fillText('✨ NEUER REKORD!', W/2, H/2-CELL*2.2);
+      ctx.shadowBlur=0;
+    }
     ctx.shadowColor='#ef4444'; ctx.shadowBlur=20;
     ctx.fillStyle='#ef4444'; ctx.font=`bold ${Math.round(CELL*1.6)}px monospace`;
     ctx.fillText('💀 TOT', W/2, H/2-CELL);
     ctx.shadowBlur=0;
     ctx.fillStyle='#fff'; ctx.font=`${Math.round(CELL*0.85)}px sans-serif`;
     ctx.fillText(`Punkte: ${score}`, W/2, H/2+CELL*0.2);
-    ctx.fillStyle='rgba(200,255,200,0.7)'; ctx.font=`${Math.round(CELL*0.68)}px sans-serif`;
-    ctx.fillText('Tippe zum Neustart', W/2, H/2+CELL*1.4);
+    if(highScore>0){
+      ctx.fillStyle='rgba(255,220,80,0.75)'; ctx.font=`${Math.round(CELL*0.7)}px monospace`;
+      ctx.fillText(`Rekord: ${highScore}`, W/2, H/2+CELL*1.05);
+    }
+    ctx.fillStyle='rgba(200,255,200,0.65)'; ctx.font=`${Math.round(CELL*0.65)}px sans-serif`;
+    ctx.fillText('Tippe zum Neustart', W/2, H/2+CELL*1.75);
     ctx.textAlign='left'; ctx.globalAlpha=1;
   }
 
-  /* ══ COMBO HUD ══════════════════════════════════════════════════════ */
+  /* ══ PAUSE OVERLAY ══════════════════════════════════════════════════ */
+  function drawPause() {
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';
+    ctx.shadowColor='#00ff88'; ctx.shadowBlur=20;
+    ctx.fillStyle='#00ff88'; ctx.font=`bold ${Math.round(CELL*1.8)}px monospace`;
+    ctx.fillText('⏸ PAUSE', W/2, H/2-CELL*0.5);
+    ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(200,255,200,0.6)'; ctx.font=`${Math.round(CELL*0.7)}px sans-serif`;
+    ctx.fillText('P oder Escape zum Weitermachen', W/2, H/2+CELL*0.8);
+    ctx.textAlign='left';
+  }
+
+  /* ══ COMBO + MINI-HUD ═══════════════════════════════════════════════ */
   function drawCombo() {
-    if(combo<=1||comboTimer<=0)return;
+    // Mini high score badge (top-right)
+    if(highScore>0){
+      ctx.save();
+      ctx.fillStyle='rgba(0,0,0,0.45)';
+      ctx.beginPath(); ctx.roundRect(W-72,4,68,18,5); ctx.fill();
+      ctx.fillStyle='rgba(255,220,80,0.8)'; ctx.font='8px monospace';
+      ctx.textAlign='right';
+      ctx.fillText(`BEST:${highScore}`, W-6, 16);
+      ctx.textAlign='left'; ctx.restore();
+    }
+    // Pause hint
+    ctx.fillStyle='rgba(255,255,255,0.2)'; ctx.font='8px monospace';
+    ctx.textAlign='right';
+    ctx.fillText('[P] Pause', W-4, H-4);
+    ctx.textAlign='left';
+
+    if(combo<=1||comboTimer<=0) return;
     const alpha=Math.min(1,comboTimer/30);
     ctx.save(); ctx.globalAlpha=alpha;
     ctx.fillStyle='#fbbf24'; ctx.font=`bold ${Math.round(CELL*1.1)}px monospace`;
@@ -356,6 +392,8 @@
       return;
     }
 
+    if(paused){ drawBg(); drawFoods(); drawSnake(); drawCombo(); drawPause(); return; }
+
     if(comboTimer>0)comboTimer--;
     tickTimer+=dt;
     if(tickTimer>=speed){tickTimer-=speed;tick();}
@@ -369,9 +407,10 @@
     head.x=(head.x+COLS)%COLS; head.y=(head.y+ROWS)%ROWS;
 
     if(snake.some(s=>s.x===head.x&&s.y===head.y)){
-      // Death explosion
       for(let i=0;i<snake.length;i+=2) burst(snake[i].x,snake[i].y,'#ef4444',4);
       burst(snake[0].x,snake[0].y,'#22c55e',12);
+      newBest = score>highScore;
+      if(newBest){highScore=score;localStorage.setItem('snake_hs',highScore);}
       dead=true; return;
     }
 
@@ -387,7 +426,6 @@
       speed=Math.max(55,speed-3);
     } else {
       snake.pop();
-      if(Math.random()<0.01) comboTimer=0; // combo resets on miss
     }
   }
 
@@ -403,6 +441,7 @@
   document.getElementById('sn-right').addEventListener('click',()=>setDir(1,0));
 
   function onKey(e){
+    if(e.key==='p'||e.key==='P'||e.key==='Escape'){if(!dead){paused=!paused;}return;}
     const map={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
     if(map[e.key]){e.preventDefault();setDir(...map[e.key]);}
   }

@@ -63,6 +63,24 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('hidden',s.id!==id));
 }
 
+function updateHomeScores() {
+  const entries = [
+    ['hs-blockblast', 'bb_highscore'],
+    ['hs-runner',     'runner_hs'],
+    ['hs-snake',      'snake_hs'],
+    ['hs-breakout',   'breakout_hs'],
+    ['hs-obby',       'obby_hs'],
+    ['hs-blox',       'blox_hs'],
+  ];
+  for (const [elId, key] of entries) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    const val = parseInt(localStorage.getItem(key) || '0');
+    if (val > 0) { el.textContent = `BEST ${val}`; el.classList.add('visible'); }
+    else           { el.classList.remove('visible'); }
+  }
+}
+
 function goHome() {
   if (typeof stopRunner    === 'function') stopRunner();
   if (typeof stopPlanet    === 'function') stopPlanet();
@@ -70,6 +88,7 @@ function goHome() {
   if (typeof stopBreakout  === 'function') stopBreakout();
   if (typeof stopObby      === 'function') stopObby();
   if (typeof stopBlox      === 'function') stopBlox();
+  updateHomeScores();
   showScreen('home-screen');
 }
 
@@ -421,4 +440,5 @@ document.getElementById('ttt-restart').addEventListener('click',startTTT);
 initBBCanvas();
 initBg();
 requestAnimationFrame(animateBg);
+updateHomeScores();
 showScreen('home-screen');
