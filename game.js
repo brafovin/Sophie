@@ -91,6 +91,7 @@ function updateHomeScores() {
 }
 
 function goHome() {
+  if (bbShimmerRaf) { cancelAnimationFrame(bbShimmerRaf); bbShimmerRaf = null; }
   if (typeof stopRunner    === 'function') stopRunner();
   if (typeof stopPlanet    === 'function') stopPlanet();
   if (typeof stopSnake     === 'function') stopSnake();
@@ -155,7 +156,7 @@ function darken(hex,amt) {
   return `rgb(${Math.max(0,(n>>16)-amt)},${Math.max(0,((n>>8)&0xff)-amt)},${Math.max(0,(n&0xff)-amt)})`;
 }
 
-function drawCell(ctx,x,y,color,size,alpha=1) {
+function drawCell(ctx,x,y,color,size,alpha=1,shimmerT=0) {
   ctx.save();
   const r=Math.max(3,size*0.18);
   ctx.globalAlpha=alpha*0.5; fillRR(ctx,x+2,y+5,size,size,r,'rgba(0,0,0,0.55)');
@@ -174,6 +175,20 @@ function drawCell(ctx,x,y,color,size,alpha=1) {
   ctx.fillStyle=bot; ctx.fillRect(x,y+size*0.48,size,size*0.52);
   ctx.globalAlpha=alpha*0.55; ctx.fillStyle='rgba(255,255,255,0.65)';
   ctx.fillRect(x+r*0.7,y+1.5,size-r*1.4,Math.max(1.5,size*0.04));
+  if (shimmerT > 0) {
+    const h0 = (x*0.68 + y*0.68 + shimmerT*0.032) % 360;
+    const sg = ctx.createLinearGradient(x,y,x+size,y+size);
+    sg.addColorStop(0,   `hsla(${h0},      100%,70%,0)`);
+    sg.addColorStop(0.2, `hsla(${(h0+ 60)%360},100%,70%,0.42)`);
+    sg.addColorStop(0.4, `hsla(${(h0+120)%360},100%,70%,0.42)`);
+    sg.addColorStop(0.6, `hsla(${(h0+200)%360},100%,70%,0.42)`);
+    sg.addColorStop(0.8, `hsla(${(h0+280)%360},100%,70%,0.42)`);
+    sg.addColorStop(1,   `hsla(${(h0+360)%360},100%,70%,0)`);
+    ctx.globalAlpha = alpha*0.48;
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = sg; ctx.fillRect(x,y,size,size);
+    ctx.globalCompositeOperation = 'source-over';
+  }
   ctx.restore(); ctx.restore();
 }
 
@@ -210,6 +225,7 @@ const BORDER=6,TRAY_CELL=26,TRAY_GAP=2,DRAG_CELL=Math.round(CELL*0.85),DRAG_GAP=
 
 let bbGrid=[],bbScore=0,bbHighscore=parseInt(localStorage.getItem('bb_highscore')||'0');
 let bbPieces=[],bbUsed=[],bbDrag=null,bbGhost=null,bbGhostOk=false,bbFlash=null,bbLocked=false;
+let bbGlowT=0, bbShimmerRaf;
 
 function bbCellX(c){return BORDER+c*(CELL+GAP);}
 function bbCellY(r){return BORDER+r*(CELL+GAP);}
@@ -222,6 +238,7 @@ function drawEmptyCell(ctx,x,y,size,hint=null) {
 }
 
 function drawBBGrid() {
+  bbGlowT = performance.now();
   ctx.clearRect(0,0,gridCanvas.width,gridCanvas.height);
   ctx.fillStyle='#0a1020'; ctx.fillRect(0,0,gridCanvas.width,gridCanvas.height);
   const ghostSet=bbGhost?new Set(bbGhost.map(c=>`${c.r},${c.c}`)):new Set();
@@ -233,9 +250,9 @@ function drawBBGrid() {
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
     const x=bbCellX(c),y=bbCellY(r),color=bbGrid[r][c],key=`${r},${c}`;
     const hint=(nearRows.has(r)||nearCols.has(c))?'#f5a623':null;
-    if(color){drawCell(ctx,x,y,color,CELL);}
+    if(color){drawCell(ctx,x,y,color,CELL,1,bbGlowT);}
     else if(ghostSet.has(key)){
-      drawCell(ctx,x,y,ghostColor,CELL,bbGhostOk?0.6:0.2);
+      drawCell(ctx,x,y,ghostColor,CELL,bbGhostOk?0.6:0.2,bbGlowT);
       if(bbGhostOk){ctx.save();ctx.globalAlpha=0.85;ctx.strokeStyle='rgba(255,255,255,0.8)';ctx.lineWidth=2;roundedRectPath(ctx,x+1,y+1,CELL-2,CELL-2,cellR);ctx.stroke();ctx.restore();}
     }else{drawEmptyCell(ctx,x,y,CELL,hint);}
   }
@@ -254,7 +271,7 @@ function drawBBTray() {
     const p=bbPieces[i],mr=Math.max(...p.cells.map(c=>c[0])),mc=Math.max(...p.cells.map(c=>c[1]));
     canvas.width=(mc+1)*(TRAY_CELL+TRAY_GAP)-TRAY_GAP+8;canvas.height=(mr+1)*(TRAY_CELL+TRAY_GAP)-TRAY_GAP+8;
     pctx.clearRect(0,0,canvas.width,canvas.height);
-    for(const[row,col]of p.cells)drawCell(pctx,4+col*(TRAY_CELL+TRAY_GAP),4+row*(TRAY_CELL+TRAY_GAP),p.color,TRAY_CELL);
+    for(const[row,col]of p.cells)drawCell(pctx,4+col*(TRAY_CELL+TRAY_GAP),4+row*(TRAY_CELL+TRAY_GAP),p.color,TRAY_CELL,1,bbGlowT);
   }
 }
 
@@ -263,7 +280,7 @@ function renderDragPiece(piece) {
   dragCanvas.width=DRAG_PAD*2+(mc+1)*DRAG_CELL+mc*DRAG_GAP;
   dragCanvas.height=DRAG_PAD*2+(mr+1)*DRAG_CELL+mr*DRAG_GAP;
   dragCtx.clearRect(0,0,dragCanvas.width,dragCanvas.height);
-  for(const[r,c]of piece.cells)drawCell(dragCtx,DRAG_PAD+c*(DRAG_CELL+DRAG_GAP),DRAG_PAD+r*(DRAG_CELL+DRAG_GAP),piece.color,DRAG_CELL,0.95);
+  for(const[r,c]of piece.cells)drawCell(dragCtx,DRAG_PAD+c*(DRAG_CELL+DRAG_GAP),DRAG_PAD+r*(DRAG_CELL+DRAG_GAP),piece.color,DRAG_CELL,0.95,bbGlowT);
 }
 
 function moveDragCanvas(cx,cy){
@@ -347,12 +364,19 @@ function bbRefill(){bbPieces=[bbRand(),bbRand(),bbRand()];bbUsed=[false,false,fa
 function bbRand(){return{cells:PIECE_DEFS[Math.floor(Math.random()*PIECE_DEFS.length)].cells,color:BB_COLORS[Math.floor(Math.random()*BB_COLORS.length)]};}
 function bbGameOver(){document.getElementById('final-score').textContent=bbScore;document.getElementById('overlay').classList.remove('hidden');}
 
+function bbShimmerLoop() {
+  if (!bbLocked) { drawBBGrid(); drawBBTray(); }
+  bbShimmerRaf = requestAnimationFrame(bbShimmerLoop);
+}
+
 function startGame(){
   bbGrid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
   bbScore=0;bbLocked=false;
   document.getElementById('score').textContent='0';document.getElementById('highscore').textContent=bbHighscore;
   document.getElementById('overlay').classList.add('hidden');dragCanvas.style.display='none';
-  bbGhost=null;bbDrag=null;bbFlash=null;bbRefill();drawBBGrid();drawBBTray();
+  bbGhost=null;bbDrag=null;bbFlash=null;bbRefill();
+  if (bbShimmerRaf) cancelAnimationFrame(bbShimmerRaf);
+  bbShimmerLoop();
 }
 
 function initBBCanvas(){gridCanvas.width=BORDER*2+COLS*CELL+(COLS-1)*GAP;gridCanvas.height=BORDER*2+ROWS*CELL+(ROWS-1)*GAP;}
