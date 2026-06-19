@@ -7,16 +7,21 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Animated background -->
+  <canvas id="bg-canvas"></canvas>
+  <!-- Floating score popups -->
+  <div id="popup-layer"></div>
+
   <div id="app">
     <header>
-      <h1>Block Blast</h1>
+      <h1>Block<br>Blast</h1>
       <div id="score-area">
         <div class="score-box">
           <span class="label">Punkte</span>
           <span id="score">0</span>
         </div>
-        <div class="score-box">
-          <span class="label">Bestpunktzahl</span>
+        <div class="score-box best">
+          <span class="label">Rekord</span>
           <span id="highscore">0</span>
         </div>
       </div>
@@ -27,6 +32,7 @@
         <canvas id="grid-canvas"></canvas>
         <div id="overlay" class="hidden">
           <div id="overlay-content">
+            <div id="overlay-emoji">💥</div>
             <h2>Spiel vorbei!</h2>
             <p>Punkte: <strong id="final-score">0</strong></p>
             <button id="restart-btn">Nochmal spielen</button>
@@ -35,9 +41,9 @@
       </div>
 
       <div id="piece-tray">
-        <canvas id="piece-0" class="piece-canvas"></canvas>
-        <canvas id="piece-1" class="piece-canvas"></canvas>
-        <canvas id="piece-2" class="piece-canvas"></canvas>
+        <div class="piece-slot"><canvas id="piece-0" class="piece-canvas"></canvas></div>
+        <div class="piece-slot"><canvas id="piece-1" class="piece-canvas"></canvas></div>
+        <div class="piece-slot"><canvas id="piece-2" class="piece-canvas"></canvas></div>
       </div>
     </main>
   </div>
