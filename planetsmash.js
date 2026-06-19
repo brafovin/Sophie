@@ -18,6 +18,58 @@
   let destroyed = false;
   let destroyTimer = 0;
   let chunks = [];
+  let spaceBg = null, starField = [];
+
+  // Per-planet atmosphere halo colours [R,G,B]
+  const ATM_COLS = {
+    earth: [80,165,255], mars: [220,100,55], gas: [200,168,110],
+    ice: [155,210,245], lava: [255,75,0], moon: null,
+    ocean: [40,135,225], alien: [130,50,235],
+  };
+
+  function initSpace() {
+    const rng = mulberry32(77);
+    starField = [];
+    for (let i = 0; i < 120; i++) {
+      const t = rng();
+      starField.push({
+        x: rng() * SIZE, y: rng() * SIZE,
+        r: t < 0.06 ? 1.6 + rng() * 0.8 : (t < 0.22 ? 0.9 + rng() * 0.5 : 0.25 + rng() * 0.45),
+        alpha: 0.35 + rng() * 0.65,
+        phase: rng() * Math.PI * 2,
+        twSpd: 0.016 + rng() * 0.036,
+        hue: t < 0.08 ? 210 : (t < 0.18 ? 220 : (t < 0.58 ? -1 : (t < 0.78 ? 48 : (t < 0.92 ? 22 : 0)))),
+        sat: t < 0.08 ? 80  : (t < 0.18 ? 55  : (t < 0.58 ?  0 : (t < 0.78 ? 50 : (t < 0.92 ? 65 : 70)))),
+        bright: t < 0.07,
+      });
+    }
+    spaceBg = document.createElement('canvas');
+    spaceBg.width = spaceBg.height = SIZE;
+    const nc = spaceBg.getContext('2d');
+    // Milky-way band
+    const mw = nc.createLinearGradient(0, 0, SIZE, SIZE);
+    mw.addColorStop(0,   'rgba(200,200,255,0)');
+    mw.addColorStop(0.4, 'rgba(210,215,255,0.05)');
+    mw.addColorStop(0.6, 'rgba(210,215,255,0.05)');
+    mw.addColorStop(1,   'rgba(200,200,255,0)');
+    nc.fillStyle = mw; nc.fillRect(0, 0, SIZE, SIZE);
+    // Nebula clouds
+    const neb = [
+      { x:SIZE*0.24, y:SIZE*0.22, r:72,  h:285, s:70, l:25, a:0.14 },
+      { x:SIZE*0.76, y:SIZE*0.18, r:55,  h:210, s:65, l:20, a:0.12 },
+      { x:SIZE*0.55, y:SIZE*0.70, r:80,  h:330, s:72, l:27, a:0.10 },
+      { x:SIZE*0.12, y:SIZE*0.62, r:50,  h:258, s:60, l:20, a:0.09 },
+      { x:SIZE*0.84, y:SIZE*0.55, r:62,  h:185, s:68, l:22, a:0.11 },
+    ];
+    for (const n of neb) {
+      const g = nc.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+      g.addColorStop(0,   `hsla(${n.h},${n.s}%,${n.l}%,${n.a})`);
+      g.addColorStop(0.4, `hsla(${n.h},${n.s}%,${n.l}%,${n.a*0.5})`);
+      g.addColorStop(1,   `hsla(${n.h},${n.s}%,${n.l}%,0)`);
+      nc.fillStyle = g;
+      nc.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
+    }
+  }
 
   /* ── RNG ──────────────────────────────────────────────────────────── */
   function mulberry32(seed) {
@@ -403,7 +455,7 @@
     const spc = planetOff.getContext('2d');
     for (const ox of [0, SIZE]) {
       const spec = spc.createRadialGradient(ox + CX - 40, CY - 40, 3, ox + CX - 28, CY - 28, 60);
-      spec.addColorStop(0, 'rgba(255,255,255,0.32)');
+      spec.addColorStop(0, 'rgba(255,255,255,0.10)');
       spec.addColorStop(1, 'rgba(255,255,255,0)');
       spc.save();
       spc.beginPath(); spc.arc(ox + CX, CY, PR, 0, Math.PI * 2); spc.clip();
@@ -532,21 +584,33 @@
 
   /* ══ DRAW ════════════════════════════════════════════════════════════ */
   function drawSpace() {
-    ctx.fillStyle = '#050510';
+    ctx.fillStyle = '#020208';
     ctx.fillRect(0, 0, SIZE, SIZE);
-    // Static star field (seeded)
-    const rng = mulberry32(77);
-    for (let i = 0; i < 80; i++) {
-      const sx = rng() * SIZE, sy = rng() * SIZE;
-      const sr = 0.4 + rng() * 1.1;
-      const al = 0.3 + rng() * 0.7;
-      ctx.fillStyle = `rgba(255,255,255,${al})`;
-      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
+    if (spaceBg) ctx.drawImage(spaceBg, 0, 0);
+
+    for (const s of starField) {
+      const tw = 0.65 + 0.35 * Math.sin(frame * s.twSpd + s.phase);
+      const a  = s.alpha * tw;
+      if (s.bright) {
+        ctx.shadowColor = s.hue >= 0 ? `hsl(${s.hue},${s.sat}%,92%)` : '#ffffff';
+        ctx.shadowBlur  = 5;
+      }
+      ctx.fillStyle = s.hue >= 0
+        ? `hsla(${s.hue},${s.sat}%,93%,${a})`
+        : `rgba(255,255,255,${a})`;
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+      if (s.bright) {
+        ctx.shadowBlur = 0;
+        if (s.r > 1.4) {
+          const spk = s.r * 5;
+          ctx.strokeStyle = `rgba(255,255,255,${a * 0.32})`;
+          ctx.lineWidth = 0.6;
+          ctx.beginPath(); ctx.moveTo(s.x - spk, s.y); ctx.lineTo(s.x + spk, s.y); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(s.x, s.y - spk); ctx.lineTo(s.x, s.y + spk); ctx.stroke();
+        }
+      }
     }
-    // Nebula wisps
-    const neb = ctx.createRadialGradient(80, 60, 10, 80, 60, 100);
-    neb.addColorStop(0, 'rgba(80,40,140,0.12)'); neb.addColorStop(1, 'rgba(80,40,140,0)');
-    ctx.fillStyle = neb; ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.shadowBlur = 0;
   }
 
   function drawPlanet(sx, sy) {
@@ -600,17 +664,94 @@
       ctx.globalAlpha = 1;
     });
 
+    // ── Directional terminator shadow (light from upper-left) ──────────
+    const terminator = ctx.createRadialGradient(
+      CX - PR * 0.38, CY - PR * 0.30, PR * 0.05,   // bright focal point
+      CX + PR * 0.40, CY + PR * 0.32, PR * 1.30    // shadow spreads here
+    );
+    terminator.addColorStop(0,    'rgba(0,0,0,0)');
+    terminator.addColorStop(0.42, 'rgba(0,0,0,0)');
+    terminator.addColorStop(0.60, 'rgba(0,0,0,0.18)');
+    terminator.addColorStop(0.76, 'rgba(0,0,0,0.52)');
+    terminator.addColorStop(0.88, 'rgba(0,0,0,0.76)');
+    terminator.addColorStop(1.0,  'rgba(0,0,0,0.90)');
+    ctx.fillStyle = terminator;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // ── Sharp specular highlight (focused on lit side) ──────────────────
+    const spec = ctx.createRadialGradient(
+      CX - PR * 0.36, CY - PR * 0.28, 0,
+      CX - PR * 0.30, CY - PR * 0.22, PR * 0.44
+    );
+    spec.addColorStop(0,    'rgba(255,255,255,0.42)');
+    spec.addColorStop(0.22, 'rgba(255,255,255,0.14)');
+    spec.addColorStop(0.55, 'rgba(255,255,255,0.04)');
+    spec.addColorStop(1,    'rgba(255,255,255,0)');
+    ctx.fillStyle = spec;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
     ctx.restore(); // end planet clip
 
-    // Specular rim light (outside clip so it stays sharp)
-    const rim = ctx.createRadialGradient(CX, CY, PR * 0.94, CX, CY, PR * 1.04);
-    rim.addColorStop(0, 'rgba(255,255,255,0.0)');
-    rim.addColorStop(1, 'rgba(255,255,255,0.1)');
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 2;
+    // ── Atmosphere halo (outside clip, around limb) ─────────────────────
+    const ac = ATM_COLS[currentPlanetType];
+    if (ac) {
+      const halo = ctx.createRadialGradient(CX, CY, PR * 0.90, CX, CY, PR * 1.24);
+      halo.addColorStop(0,    `rgba(${ac[0]},${ac[1]},${ac[2]},0)`);
+      halo.addColorStop(0.32, `rgba(${ac[0]},${ac[1]},${ac[2]},0.22)`);
+      halo.addColorStop(0.62, `rgba(${ac[0]},${ac[1]},${ac[2]},0.12)`);
+      halo.addColorStop(1,    `rgba(${ac[0]},${ac[1]},${ac[2]},0)`);
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(CX, CY, PR * 1.24, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Thin limb edge
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(CX, CY, PR, 0, Math.PI * 2); ctx.stroke();
 
     ctx.restore(); // end shake translate
+  }
+
+  /* ── Saturn-style rings for the gas planet ──────────────────────────── */
+  function drawRingsPart(sx, sy, front) {
+    if (currentPlanetType !== 'gas') return;
+    ctx.save();
+    ctx.translate(sx + CX, sy + CY);
+
+    const rings = [
+      { r: PR * 1.28, w: 9,  a: 0.38 },
+      { r: PR * 1.48, w: 16, a: 0.48 },
+      { r: PR * 1.70, w: 11, a: 0.32 },
+      { r: PR * 1.93, w: 13, a: 0.40 },
+      { r: PR * 2.16, w:  6, a: 0.22 },
+    ];
+
+    // Clip to upper (front) or lower (back) half
+    ctx.save();
+    ctx.beginPath();
+    if (front) ctx.rect(-SIZE, -SIZE, SIZE * 2, SIZE);  // upper half
+    else       ctx.rect(-SIZE,     0, SIZE * 2, SIZE);  // lower half
+    ctx.clip();
+
+    const tilt = 0.27; // vertical squash (perspective)
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const ring = rings[i];
+      const rg = ctx.createLinearGradient(-ring.r, 0, ring.r, 0);
+      rg.addColorStop(0,    `rgba(135,112,78,${ring.a * 0.2})`);
+      rg.addColorStop(0.14, `rgba(198,170,118,${ring.a * 0.9})`);
+      rg.addColorStop(0.33, `rgba(218,188,132,${ring.a})`);
+      rg.addColorStop(0.50, `rgba(195,162,110,${ring.a * 0.75})`);
+      rg.addColorStop(0.67, `rgba(212,182,128,${ring.a * 0.95})`);
+      rg.addColorStop(0.86, `rgba(198,168,116,${ring.a * 0.85})`);
+      rg.addColorStop(1,    `rgba(135,112,78,${ring.a * 0.2})`);
+      ctx.strokeStyle = rg;
+      ctx.lineWidth = ring.w;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, ring.r, ring.r * tilt, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.restore();
   }
 
   function drawEffects() {
@@ -848,14 +989,17 @@
 
     // Draw
     drawSpace();
+    drawRingsPart(sx, sy, false);   // rings behind planet
     if (!destroyed) {
       drawPlanet(sx, sy);
+      drawRingsPart(sx, sy, true);  // rings in front of planet
       drawEffects();
       drawProjectiles();
       drawParticles();
       drawHpBar();
     } else {
       drawPlanet(sx, sy);
+      drawRingsPart(sx, sy, true);
       drawParticles();
       drawDestroyed();
     }
@@ -915,6 +1059,7 @@
     if (running) stopPlanet();
     running = true;
     frame   = 0;
+    initSpace();
     initState();
     raf = requestAnimationFrame(loop);
   };
