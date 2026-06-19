@@ -1,4 +1,4 @@
-/* ══ Obby Run ═════════════════════════════════════════════════════════════
+/* ══ Obby Run — Volcanic Cave Edition ════════════════════════════════════
    Side-scrolling platformer: jump through the obstacle course while lava
    rises from below. Collect gems, reach the finish flag!
 ══════════════════════════════════════════════════════════════════════════ */
@@ -16,20 +16,21 @@
   const JUMP_FORCE   = -10.8;
   const MOVE_SPEED   = 3.6;
   const MAX_FALL     = 11;
-  const COYOTE_TIME  = 7;   // frames grace period after walking off edge
-  const JUMP_BUFFER  = 8;   // frames to buffer jump input before landing
+  const COYOTE_TIME  = 7;
+  const JUMP_BUFFER  = 8;
 
   // ── Dimensions ──────────────────────────────────────────────────────
-  const PW = 18, PH = 26;     // player size
-  const PF_H = 12;             // platform height
+  const PW = 18, PH = 26;
+  const PF_H = 12;
 
   // ── State ────────────────────────────────────────────────────────────
   let running = false, raf;
   let frame = 0;
   let player, platforms, gems, spikes, sawblades, checkpoints;
   let cameraX, lavaY, lavaSpeed;
-  let score, lives, state; // 'playing' | 'dead' | 'win'
-  let particles, bgStars;
+  let score, lives, state;
+  let particles;
+  let caveStals, caveCrystals; // cave decorations (world-space)
   let deathTimer, winTimer;
   let checkpointX, checkpointGemCount;
   let keys = {};
@@ -50,13 +51,12 @@
   // ════════════════════════════════════════════════════════════════════
   // LEVEL GENERATION
   // ════════════════════════════════════════════════════════════════════
-  const LEVEL_LEN = 70; // number of platform segments
+  const LEVEL_LEN = 70;
 
   function generateLevel() {
     const rng = mulberry32(42);
     platforms = []; gems = []; spikes = []; sawblades = []; checkpoints = [];
 
-    // Starting platform (long, safe)
     platforms.push({ x: -60, y: 190, w: 280, h: PF_H, moving: false });
 
     let curX = 220, curY = 190;
@@ -84,7 +84,6 @@
       };
       platforms.push(plat);
 
-      // Spikes on platform surface
       if (hasSpike) {
         const numSpikes = 1 + Math.floor(rng() * 3);
         const sx0 = plat.x + 8 + rng() * (plat.w - 24 - numSpikes * 12);
@@ -93,7 +92,6 @@
         }
       }
 
-      // Sawblades in the air
       if (hasSaw) {
         sawblades.push({
           x: plat.x + plat.w / 2,
@@ -107,7 +105,6 @@
         });
       }
 
-      // Gems above platform
       const gemCount = Math.floor(rng() * 3) + 1;
       for (let g = 0; g < gemCount; g++) {
         gems.push({
@@ -117,7 +114,6 @@
         });
       }
 
-      // Checkpoints every 15 platforms
       if (i > 0 && i % 15 === 0) {
         checkpoints.push({ x: plat.x + plat.w / 2, y: plat.y - 30, activated: false });
       }
@@ -126,20 +122,48 @@
       curY  = plat.y;
     }
 
-    // Finish flag
     checkpoints.push({ x: curX + 120, y: 170, activated: false, isFinal: true });
     platforms.push({ x: curX + 60, y: 185, w: 180, h: PF_H, moving: false });
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // INIT
+  // CAVE DECORATION INIT  (replaces star init)
   // ════════════════════════════════════════════════════════════════════
   function initBgStars() {
-    bgStars = [];
-    const rng = mulberry32(13);
-    for (let i = 0; i < 60; i++) bgStars.push({ x: rng() * W * 4, y: rng() * H, r: 0.5 + rng(), alpha: 0.3 + rng() * 0.5 });
+    // Stalactites hanging from ceiling in world space
+    caveStals = [];
+    const rng2 = mulberry32(17);
+    for (let wx = -200; wx < 12000; wx += 38 + rng2() * 52) {
+      caveStals.push({
+        wx,
+        h:  14 + rng2() * 30,
+        bw:  6 + rng2() * 14,
+        shade: Math.floor(rng2() * 35 + 18),
+      });
+    }
+
+    // Crystal formations on cave ceiling / walls
+    caveCrystals = [];
+    const rng3 = mulberry32(31);
+    for (let wx = -100; wx < 12000; wx += 75 + rng3() * 130) {
+      const count = Math.floor(rng3() * 3) + 1;
+      for (let k = 0; k < count; k++) {
+        const hueChoice = rng3();
+        caveCrystals.push({
+          wx: wx + rng3() * 40 - 20,
+          wy: 8 + rng3() * 28,
+          h:  9 + rng3() * 18,
+          w:  4 + rng3() * 7,
+          hue: hueChoice < 0.45 ? 175 : (hueChoice < 0.75 ? 270 : 28),
+          phase: rng3() * Math.PI * 2,
+        });
+      }
+    }
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  // INIT
+  // ════════════════════════════════════════════════════════════════════
   function spawnPlayer(wx, wy) {
     player = {
       x: wx, y: wy,
@@ -147,7 +171,7 @@
       grounded: false,
       facingRight: true,
       runFrame: 0,
-      invincible: 0,  // frames of invincibility after respawn
+      invincible: 0,
     };
   }
 
@@ -179,7 +203,7 @@
     state = 'playing';
     deathTimer = 0;
     lavaY = H + 80;
-    lavaSpeed = 0.055 + frame * 0.000003; // maintain difficulty
+    lavaSpeed = 0.055 + frame * 0.000003;
     respawnFlash = 20;
     particles = [];
   }
@@ -205,7 +229,6 @@
     lavaSpeed += 0.000008;
     lavaY     -= lavaSpeed;
 
-    // Moving platforms
     platforms.forEach((p, i) => {
       if (!p.moving) return;
       const t = frame * p.moveSpeed * 0.02 + p.phase;
@@ -214,7 +237,6 @@
       } else {
         p.x = p.ox + Math.sin(t) * p.moveRange;
       }
-      // Sync spikes to their platform
       spikes.forEach(s => {
         if (s.platIdx === i) {
           s.y = p.y - 10;
@@ -223,7 +245,6 @@
       });
     });
 
-    // Sawblades orbit
     sawblades.forEach(s => {
       s.phase += s.orbitSpeed;
       s.x = s.ox + Math.cos(s.phase) * s.orbitR;
@@ -231,7 +252,6 @@
       s.rot += 0.06;
     });
 
-    // ── Player movement ──────────────────────────────────────────────
     const moveLeft  = keys['ArrowLeft']  || keys['a'] || keys['_left'];
     const moveRight = keys['ArrowRight'] || keys['d'] || keys['_right'];
     const wantJump  = keys['ArrowUp']    || keys['w'] || keys[' '] || keys['_jump'];
@@ -240,59 +260,46 @@
     else if (moveRight) { player.vx = MOVE_SPEED; player.facingRight = true; }
     else player.vx = 0;
 
-    // Jump buffer
     if (wantJump) jumpBufferTimer = JUMP_BUFFER;
     else if (jumpBufferTimer > 0) jumpBufferTimer--;
 
-    // Coyote time
     if (player.grounded) { coyoteTimer = COYOTE_TIME; lastGrounded = true; }
     else if (coyoteTimer > 0) coyoteTimer--;
 
-    // Execute jump
     if (jumpBufferTimer > 0 && coyoteTimer > 0 && player.vy >= -1) {
       player.vy = JUMP_FORCE;
       jumpBufferTimer = 0; coyoteTimer = 0;
-      burst(player.x + PW/2, player.y + PH, '#a5b4fc', 6, 3);
+      burst(player.x + PW/2, player.y + PH, '#ffaa44', 6, 3);
     }
 
-    // Gravity
     player.vy = Math.min(player.vy + GRAVITY, MAX_FALL);
     player.x += player.vx;
     player.y += player.vy;
     player.grounded = false;
 
-    // Run animation
     if (player.grounded && (moveLeft || moveRight)) player.runFrame += 0.2;
 
-    // ── Platform collision ───────────────────────────────────────────
     for (const p of platforms) {
       const overlapX = player.x + PW > p.x && player.x < p.x + p.w;
       if (!overlapX) continue;
 
-      // Landing on top
       if (player.vy >= 0 && player.y + PH <= p.y + PF_H + 6 && player.y + PH >= p.y - 2) {
         player.y = p.y - PH;
         player.vy = 0;
         player.grounded = true;
-      }
-      // Hitting bottom
-      else if (player.vy < 0 && player.y >= p.y + PF_H - 4 && player.y < p.y + PF_H + 8) {
+      } else if (player.vy < 0 && player.y >= p.y + PF_H - 4 && player.y < p.y + PF_H + 8) {
         player.vy = 0.5;
         player.y = p.y + PF_H;
-      }
-      // Side push
-      else if (player.y + PH > p.y + 4 && player.y < p.y + PF_H - 4) {
+      } else if (player.y + PH > p.y + 4 && player.y < p.y + PF_H - 4) {
         if (player.x + PW / 2 < p.x + p.w / 2) player.x = p.x - PW;
         else player.x = p.x + p.w;
         player.vx = 0;
       }
     }
 
-    // ── Camera ──────────────────────────────────────────────────────
     const targetCX = player.x - 110;
     cameraX += (targetCX - cameraX) * 0.12;
 
-    // ── Gem collection ───────────────────────────────────────────────
     gems.forEach(g => {
       if (g.collected) return;
       const sx = g.x - cameraX;
@@ -304,7 +311,6 @@
       }
     });
 
-    // ── Checkpoint ──────────────────────────────────────────────────
     checkpoints.forEach(cp => {
       if (cp.activated) return;
       const sx = cp.x - cameraX;
@@ -322,7 +328,6 @@
       }
     });
 
-    // ── Spike collision ──────────────────────────────────────────────
     if (player.invincible <= 0) {
       for (const s of spikes) {
         if (player.x + PW > s.x + 2 && player.x < s.x + s.w - 2 &&
@@ -330,24 +335,17 @@
           die(); return;
         }
       }
-      // Sawblade
       for (const s of sawblades) {
         const sx = player.x + PW/2, sy = player.y + PH/2;
         if (Math.hypot(sx - s.x, sy - s.y) < s.r + PW/2 - 3) { die(); return; }
       }
     }
 
-    // ── Lava kill ───────────────────────────────────────────────────
-    const lavaSY = lavaY; // lavaY is already in screen-space (Y=0 top)
-    if (player.y + PH >= lavaSY && player.invincible <= 0) { die(); return; }
-
-    // ── Fall off bottom ──────────────────────────────────────────────
+    if (player.y + PH >= lavaY && player.invincible <= 0) { die(); return; }
     if (player.y > H + 20) { die(); return; }
 
-    // Invincibility countdown
     if (player.invincible > 0) player.invincible--;
 
-    // Particles
     particles.forEach(p => { p.wx += p.vx; p.y += p.vy; p.vy += 0.15; p.vx *= 0.92; p.life -= 0.04; });
     particles = particles.filter(p => p.life > 0);
   }
@@ -364,87 +362,227 @@
   // ════════════════════════════════════════════════════════════════════
   // DRAW
   // ════════════════════════════════════════════════════════════════════
-  function w2s(wx) { return wx - cameraX; } // world-x to screen-x
+  function w2s(wx) { return wx - cameraX; }
 
+  /* ── Cave background ─────────────────────────────────────────────── */
   function drawBg() {
-    // Night sky gradient
+    // Sky/cave gradient — warm amber near bottom (lava glow), dark stone at top
+    const lavaPct = Math.max(0, Math.min(1, 1 - (lavaY - H/2) / (H/2 + 80)));
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#060618'); sky.addColorStop(1, '#0d0525');
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-    // Parallax stars
-    bgStars.forEach(s => {
-      const sx = ((s.x - cameraX * 0.15) % (W * 3) + W * 3) % (W * 3) / 3;
-      ctx.globalAlpha = s.alpha;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(sx, s.y, s.r, 0, Math.PI * 2); ctx.fill();
-    });
-    ctx.globalAlpha = 1;
+    sky.addColorStop(0,   '#0d0a08');
+    sky.addColorStop(0.5, '#180e08');
+    sky.addColorStop(1,   `rgba(${Math.floor(40 + lavaPct*80)},${Math.floor(8 + lavaPct*10)},5,1)`);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
 
-    // Distant mountain silhouette (parallax layer 2)
-    ctx.fillStyle = '#0f0a2e';
-    const mOff = (cameraX * 0.25) % W;
+    // Ambient lava glow rising from bottom
+    if (lavaPct > 0.05) {
+      const glowH = Math.min(H * 0.7, H * lavaPct * 1.4 + 30);
+      const lavaGlow = ctx.createLinearGradient(0, H, 0, H - glowH);
+      lavaGlow.addColorStop(0,   `rgba(220,60,0,${lavaPct * 0.45})`);
+      lavaGlow.addColorStop(0.4, `rgba(180,30,0,${lavaPct * 0.15})`);
+      lavaGlow.addColorStop(1,   'rgba(100,10,0,0)');
+      ctx.fillStyle = lavaGlow;
+      ctx.fillRect(0, H - glowH, W, glowH);
+    }
+
+    // Parallax mid-ground cave wall silhouette (dark jagged rock)
+    const mOff = (cameraX * 0.22) % W;
+    ctx.fillStyle = '#0f0a07';
     for (let m = -1; m <= 2; m++) {
       const mx = m * W - mOff;
-      ctx.beginPath(); ctx.moveTo(mx, H);
-      ctx.lineTo(mx + 40,  H - 55); ctx.lineTo(mx + 80,  H - 30);
-      ctx.lineTo(mx + 120, H - 75); ctx.lineTo(mx + 170, H - 40);
-      ctx.lineTo(mx + 220, H - 85); ctx.lineTo(mx + 260, H - 45);
-      ctx.lineTo(mx + 300, H - 60); ctx.lineTo(mx + W, H);
+      ctx.beginPath();
+      ctx.moveTo(mx, 0);
+      ctx.lineTo(mx + 30,  28); ctx.lineTo(mx + 60,  10);
+      ctx.lineTo(mx + 90,  38); ctx.lineTo(mx + 130, 14);
+      ctx.lineTo(mx + 170, 45); ctx.lineTo(mx + 210, 18);
+      ctx.lineTo(mx + 250, 40); ctx.lineTo(mx + 290, 12);
+      ctx.lineTo(mx + 340, 32); ctx.lineTo(mx + W,    0);
       ctx.closePath(); ctx.fill();
+    }
+
+    // Stalactites (world-space, camera-transformed)
+    for (const s of caveStals) {
+      const sx = s.wx - cameraX * 0.75; // mild parallax
+      if (sx < -s.bw - 2 || sx > W + s.bw + 2) continue;
+
+      const shade = s.shade;
+      const sg = ctx.createLinearGradient(sx, 0, sx, s.h);
+      sg.addColorStop(0, `rgb(${shade+18},${shade+10},${shade+5})`);
+      sg.addColorStop(1, `rgb(${shade},${shade-4},${shade-6})`);
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.moveTo(sx - s.bw/2, 0);
+      ctx.lineTo(sx + s.bw/2, 0);
+      ctx.lineTo(sx, s.h);
+      ctx.closePath();
+      ctx.fill();
+
+      // Specular edge
+      ctx.strokeStyle = `rgba(255,200,150,0.12)`;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(sx - s.bw/2, 0);
+      ctx.lineTo(sx, s.h);
+      ctx.stroke();
+    }
+
+    // Glowing crystals embedded in cave ceiling
+    for (const c of caveCrystals) {
+      const sx = c.wx - cameraX * 0.78;
+      if (sx < -20 || sx > W + 20) continue;
+      const pulse = 0.55 + 0.45 * Math.sin(frame * 0.04 + c.phase);
+      ctx.shadowColor = `hsl(${c.hue},90%,70%)`;
+      ctx.shadowBlur = 8 * pulse;
+      ctx.fillStyle = `hsla(${c.hue},85%,65%,${pulse * 0.85})`;
+      ctx.beginPath();
+      ctx.moveTo(sx, c.wy);
+      ctx.lineTo(sx - c.w/2, c.wy - c.h * 0.4);
+      ctx.lineTo(sx, c.wy + c.h);
+      ctx.lineTo(sx + c.w/2, c.wy - c.h * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Crystal tip highlight
+      ctx.fillStyle = `rgba(255,255,255,${pulse * 0.6})`;
+      ctx.beginPath();
+      ctx.arc(sx, c.wy + c.h * 0.88, 1.2, 0, Math.PI*2);
+      ctx.fill();
     }
   }
 
+  /* ── Stone platform with torches ─────────────────────────────────── */
   function drawPlatform(p) {
     const sx = w2s(p.x);
     if (sx > W + 20 || sx + p.w < -20) return;
 
-    // Body
-    const grad = ctx.createLinearGradient(sx, p.y, sx, p.y + PF_H);
     if (p.moving) {
-      grad.addColorStop(0, '#7c3aed'); grad.addColorStop(1, '#4c1d95');
-    } else {
-      grad.addColorStop(0, '#374151'); grad.addColorStop(1, '#1f2937');
-    }
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.roundRect(sx, p.y, p.w, PF_H, 4); ctx.fill();
-
-    // Grass/glow top strip
-    ctx.fillStyle = p.moving ? 'rgba(167,139,250,0.8)' : '#4ade80';
-    ctx.fillRect(sx + 2, p.y, p.w - 4, 3);
-
-    // Edge shimmer
-    ctx.strokeStyle = p.moving ? 'rgba(167,139,250,0.4)' : 'rgba(74,222,128,0.25)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(sx + 0.5, p.y + 0.5, p.w - 1, PF_H - 1, 4); ctx.stroke();
-
-    // Moving platform glow aura
-    if (p.moving) {
-      ctx.shadowColor = '#7c3aed'; ctx.shadowBlur = 10;
-      ctx.strokeStyle = 'rgba(167,139,250,0.3)';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.roundRect(sx, p.y, p.w, PF_H, 4); ctx.stroke();
+      // Crystal/energy moving platform
+      ctx.shadowColor = '#c084fc';
+      ctx.shadowBlur = 12;
+      const grad = ctx.createLinearGradient(sx, p.y, sx, p.y + PF_H);
+      grad.addColorStop(0, '#a855f7');
+      grad.addColorStop(1, '#4c1d95');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.roundRect(sx, p.y, p.w, PF_H, 4); ctx.fill();
       ctx.shadowBlur = 0;
+
+      // Pulsing crystal top strip
+      const pulse = 0.6 + 0.4 * Math.sin(frame * 0.08 + p.phase);
+      ctx.fillStyle = `rgba(196,132,252,${pulse})`;
+      ctx.fillRect(sx + 2, p.y, p.w - 4, 3);
+
+      ctx.strokeStyle = `rgba(167,139,250,${pulse * 0.5})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(sx, p.y, p.w, PF_H, 4); ctx.stroke();
+    } else {
+      // Stone platform
+      const grad = ctx.createLinearGradient(sx, p.y, sx, p.y + PF_H);
+      grad.addColorStop(0, '#3d2e1e');
+      grad.addColorStop(0.3, '#2a1f12');
+      grad.addColorStop(1, '#1a1208');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.roundRect(sx, p.y, p.w, PF_H, 3); ctx.fill();
+
+      // Stone top surface (lighter stone edge)
+      const topG = ctx.createLinearGradient(sx, p.y, sx, p.y + 4);
+      topG.addColorStop(0, '#6b4f30');
+      topG.addColorStop(1, '#4a3420');
+      ctx.fillStyle = topG;
+      ctx.fillRect(sx + 2, p.y, p.w - 4, 4);
+
+      // Stone block dividers
+      ctx.strokeStyle = 'rgba(20,12,5,0.6)';
+      ctx.lineWidth = 1;
+      const blockW = 22;
+      for (let bx = sx + blockW; bx < sx + p.w - 4; bx += blockW) {
+        ctx.beginPath(); ctx.moveTo(bx, p.y + 2); ctx.lineTo(bx, p.y + PF_H - 1); ctx.stroke();
+      }
+
+      // Orange-red tinted highlight on top (cave lava ambient)
+      ctx.fillStyle = 'rgba(255,120,30,0.07)';
+      ctx.fillRect(sx + 2, p.y, p.w - 4, 4);
+
+      // Edge bevel
+      ctx.strokeStyle = 'rgba(100,70,40,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(sx + 0.5, p.y + 0.5, p.w - 1, PF_H - 1, 3); ctx.stroke();
+
+      // Torch on platforms wider than 55px (at right edge)
+      if (p.w > 55) {
+        const tx = sx + p.w - 10;
+        const ty = p.y - 14;
+        drawTorch(tx, ty);
+      }
     }
   }
 
+  /* ── Animated torch ──────────────────────────────────────────────── */
+  function drawTorch(tx, ty) {
+    // Torch stick
+    ctx.strokeStyle = '#5a3a1a';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(tx, ty + 14);
+    ctx.lineTo(tx, ty + 3);
+    ctx.stroke();
+
+    // Torch bowl (top)
+    ctx.fillStyle = '#6b4020';
+    ctx.beginPath();
+    ctx.roundRect(tx - 3, ty + 1, 6, 4, 2);
+    ctx.fill();
+
+    // Flame glow
+    const flamePhase = (frame * 0.18) % (Math.PI * 2);
+    const fw = 3.5 + Math.sin(flamePhase) * 1.2;
+    const fh = 8 + Math.sin(flamePhase * 1.3 + 0.5) * 2;
+
+    ctx.shadowColor = '#ff6600';
+    ctx.shadowBlur = 10;
+
+    const fg = ctx.createRadialGradient(tx, ty - 1, 0.5, tx, ty, fw + 2);
+    fg.addColorStop(0,   'rgba(255,240,100,0.95)');
+    fg.addColorStop(0.3, 'rgba(255,140,20,0.8)');
+    fg.addColorStop(0.7, 'rgba(220,50,5,0.4)');
+    fg.addColorStop(1,   'rgba(200,30,0,0)');
+    ctx.fillStyle = fg;
+    ctx.beginPath();
+    ctx.ellipse(tx, ty - fh/2 + 1, fw, fh/2 + 1, Math.sin(flamePhase * 0.5) * 0.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  /* ── Spikes ──────────────────────────────────────────────────────── */
   function drawSpike(s) {
     const sx = w2s(s.x);
     if (sx > W + 20 || sx < -20) return;
-    ctx.fillStyle = '#f87171';
-    ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 6;
+    ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 8;
+    const sg = ctx.createLinearGradient(sx, s.y, sx + s.w/2, s.y + s.h);
+    sg.addColorStop(0, '#dc2626'); sg.addColorStop(1, '#7f1d1d');
+    ctx.fillStyle = sg;
     ctx.beginPath();
     ctx.moveTo(sx, s.y + s.h);
     ctx.lineTo(sx + s.w / 2, s.y);
     ctx.lineTo(sx + s.w, s.y + s.h);
     ctx.closePath(); ctx.fill();
+    // Metallic sheen
+    ctx.fillStyle = 'rgba(255,180,180,0.3)';
+    ctx.beginPath();
+    ctx.moveTo(sx + s.w*0.2, s.y + s.h*0.9);
+    ctx.lineTo(sx + s.w*0.5, s.y + s.h*0.1);
+    ctx.lineTo(sx + s.w*0.35, s.y + s.h*0.9);
+    ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0;
   }
 
+  /* ── Sawblades ───────────────────────────────────────────────────── */
   function drawSawblade(s) {
     const sx = w2s(s.x);
     if (sx > W + 30 || sx < -30) return;
     ctx.save(); ctx.translate(sx, s.y); ctx.rotate(s.rot);
-    // Teeth
     ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
     for (let i = 0; i < 8; i++) {
       const a = (Math.PI * 2 * i) / 8;
@@ -453,70 +591,62 @@
       ctx.lineTo(Math.cos(a) * (s.r + 5), Math.sin(a) * (s.r + 5));
       ctx.stroke();
     }
-    // Disc
     const dg = ctx.createRadialGradient(0, 0, 1, 0, 0, s.r);
     dg.addColorStop(0, '#64748b'); dg.addColorStop(1, '#1e293b');
     ctx.fillStyle = dg;
     ctx.beginPath(); ctx.arc(0, 0, s.r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(0, 0, s.r, 0, Math.PI * 2); ctx.stroke();
-    // Center bolt
     ctx.fillStyle = '#cbd5e1';
     ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
-    // Glow
-    ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 12;
-    ctx.strokeStyle = 'rgba(239,68,68,0.35)';
-    ctx.beginPath(); ctx.arc(0, 0, s.r + 3, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 14;
+    ctx.strokeStyle = 'rgba(239,68,68,0.4)';
+    ctx.beginPath(); ctx.arc(0, 0, s.r + 4, 0, Math.PI * 2); ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.restore();
   }
 
+  /* ── Gems ────────────────────────────────────────────────────────── */
   function drawGem(g) {
     if (g.collected) return;
     const sx = w2s(g.x);
     if (sx > W + 20 || sx < -20) return;
     const bob = Math.sin(frame * 0.06 + g.phase) * 3;
-    g.phase; // read to confirm used
     ctx.save(); ctx.translate(sx, g.y + bob);
-    // Diamond shape
     const gg = ctx.createRadialGradient(0, -g.r * 0.3, 1, 0, 0, g.r);
     gg.addColorStop(0, '#a5f3fc'); gg.addColorStop(0.5, '#06b6d4'); gg.addColorStop(1, '#164e63');
     ctx.fillStyle = gg;
-    ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 12;
+    ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 14;
     ctx.beginPath();
     ctx.moveTo(0, -g.r); ctx.lineTo(g.r * 0.7, 0); ctx.lineTo(0, g.r);
     ctx.lineTo(-g.r * 0.7, 0); ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0;
-    // Shine
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.beginPath(); ctx.ellipse(-g.r*0.2, -g.r*0.4, g.r*0.2, g.r*0.1, -0.5, 0, Math.PI*2); ctx.fill();
     ctx.restore();
   }
 
+  /* ── Checkpoints ─────────────────────────────────────────────────── */
   function drawCheckpoint(cp) {
     const sx = w2s(cp.x);
     if (sx > W + 40 || sx < -40) return;
     const col = cp.activated ? '#22c55e' : '#94a3b8';
 
     if (cp.isFinal) {
-      // Finish flag
       ctx.fillStyle = col;
       ctx.fillRect(sx - 1, cp.y - 35, 3, 40);
       ctx.fillStyle = cp.activated ? '#fbbf24' : '#e2e8f0';
       ctx.fillRect(sx + 2, cp.y - 35, 20, 14);
-      // Flag stripes
       if (!cp.activated) {
         ctx.fillStyle = '#ef4444';
         ctx.fillRect(sx + 2, cp.y - 35, 20, 4);
         ctx.fillRect(sx + 2, cp.y - 27, 20, 4);
       }
-      // "ZIEL" label
       ctx.fillStyle = col;
       ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('ZIEL', sx + 10, cp.y + 12);
       ctx.textAlign = 'left';
     } else {
-      // Checkpoint star/flag
       ctx.fillStyle = col;
       ctx.fillRect(sx - 1, cp.y - 24, 2, 28);
       ctx.font = '16px serif'; ctx.textAlign = 'center';
@@ -524,7 +654,6 @@
       ctx.textAlign = 'left';
     }
 
-    // Glow when active
     if (cp.activated) {
       ctx.shadowColor = '#22c55e'; ctx.shadowBlur = 18;
       ctx.strokeStyle = 'rgba(34,197,94,0.4)'; ctx.lineWidth = 1;
@@ -533,63 +662,55 @@
     }
   }
 
+  /* ── Player ──────────────────────────────────────────────────────── */
   function drawPlayer() {
     const sx = w2s(player.x);
     const py = player.y;
     const inv = player.invincible > 0 && (frame % 6 < 3);
     if (inv) ctx.globalAlpha = 0.45;
 
-    const fl = player.facingRight ? 1 : -1;
     ctx.save(); ctx.translate(sx + PW / 2, py);
     if (!player.facingRight) ctx.scale(-1, 1);
 
-    // Shadow
     ctx.globalAlpha = (inv ? 0.2 : 0.3);
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.beginPath(); ctx.ellipse(0, PH + 2, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = inv ? 0.45 : 1;
 
-    // Legs (run cycle or jump pose)
     const phase = player.runFrame;
     ctx.strokeStyle = '#f97316'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-    if (player.grounded && (keys['ArrowLeft'] || keys['a'] || keys['_left'] || keys['ArrowRight'] || keys['d'] || keys['_right'])) {
+    const moveLeft  = keys['ArrowLeft']  || keys['a'] || keys['_left'];
+    const moveRight = keys['ArrowRight'] || keys['d'] || keys['_right'];
+    if (player.grounded && (moveLeft || moveRight)) {
       ctx.beginPath(); ctx.moveTo(0, PH - 8); ctx.lineTo(-5 + Math.cos(phase)*6, PH + 2); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, PH - 8); ctx.lineTo( 5 + Math.cos(phase+Math.PI)*6, PH + 2); ctx.stroke();
     } else if (!player.grounded) {
-      // Jump pose
       ctx.beginPath(); ctx.moveTo(0, PH - 8); ctx.lineTo(-7, PH); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, PH - 8); ctx.lineTo(5, PH + 2); ctx.stroke();
     } else {
-      // Idle
       ctx.beginPath(); ctx.moveTo(0, PH - 8); ctx.lineTo(-4, PH + 2); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, PH - 8); ctx.lineTo(4, PH + 2); ctx.stroke();
     }
 
-    // Body
     const bodyG = ctx.createLinearGradient(-PW/2, 0, PW/2, PH - 10);
     bodyG.addColorStop(0, '#a855f7'); bodyG.addColorStop(1, '#6d28d9');
     ctx.fillStyle = bodyG;
     ctx.beginPath(); ctx.roundRect(-PW/2, 0, PW, PH - 10, 4); ctx.fill();
-    // Jacket stripe
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(-PW/2 + 2, 3, 4, PH - 14);
 
-    // Arms
     ctx.strokeStyle = '#7c3aed'; ctx.lineWidth = 4;
     const armSwing = player.grounded ? Math.cos(phase) * 0.3 : 0.4;
     ctx.beginPath(); ctx.moveTo(-PW/2, 5); ctx.lineTo(-PW/2 - 6, 14 + armSwing * 4); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(PW/2, 5); ctx.lineTo(PW/2 + 6, 14 - armSwing * 4); ctx.stroke();
 
-    // Head
     const headG = ctx.createRadialGradient(-3, -4, 1, 0, -2, 11);
     headG.addColorStop(0, '#fde68a'); headG.addColorStop(1, '#d97706');
     ctx.fillStyle = headG;
     ctx.beginPath(); ctx.arc(0, -8, 11, 0, Math.PI * 2); ctx.fill();
 
-    // Helmet
     ctx.fillStyle = '#4f46e5';
     ctx.beginPath(); ctx.arc(0, -8, 11, Math.PI, 0); ctx.fill();
-    // Visor
     ctx.fillStyle = '#1e1b4b';
     ctx.beginPath(); ctx.roundRect(-7, -12, 14, 7, 3); ctx.fill();
     ctx.fillStyle = 'rgba(167,139,250,0.55)';
@@ -599,37 +720,80 @@
     ctx.globalAlpha = 1;
   }
 
+  /* ── Lava with jets ──────────────────────────────────────────────── */
   function drawLava() {
     const ly = lavaY;
     const lavaH = H - ly + 20;
     if (lavaH <= 0) return;
 
     // Surface glow
-    ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 20;
+    ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 22;
 
-    // Animated surface bubbles / waves
     const lavaGrad = ctx.createLinearGradient(0, ly, 0, H);
-    lavaGrad.addColorStop(0,   '#ff4500');
-    lavaGrad.addColorStop(0.15,'#dc2626');
-    lavaGrad.addColorStop(0.5, '#991b1b');
-    lavaGrad.addColorStop(1,   '#450a0a');
+    lavaGrad.addColorStop(0,   '#ff5500');
+    lavaGrad.addColorStop(0.1, '#e82a00');
+    lavaGrad.addColorStop(0.4, '#b01800');
+    lavaGrad.addColorStop(1,   '#3a0500');
     ctx.fillStyle = lavaGrad;
 
     ctx.beginPath(); ctx.moveTo(0, H);
-    // Wavy surface
-    for (let x = 0; x <= W; x += 8) {
-      const wave = Math.sin((x + frame * 2) * 0.04) * 3 + Math.sin((x - frame) * 0.07) * 2;
+    for (let x = 0; x <= W; x += 6) {
+      const wave = Math.sin((x + cameraX * 0.3 + frame * 2.2) * 0.04) * 3.5
+                 + Math.sin((x - cameraX * 0.15 - frame * 1.1) * 0.07) * 2;
       ctx.lineTo(x, ly + wave);
     }
     ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0;
 
+    // Bright lava surface crust (brighter orange veins)
+    ctx.strokeStyle = 'rgba(255,140,0,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 6) {
+      const wave = Math.sin((x + cameraX * 0.3 + frame * 2.2) * 0.04) * 3.5
+                 + Math.sin((x - cameraX * 0.15 - frame * 1.1) * 0.07) * 2;
+      if (x === 0) ctx.moveTo(x, ly + wave);
+      else ctx.lineTo(x, ly + wave);
+    }
+    ctx.stroke();
+
     // Lava bubbles
-    for (let b = 0; b < 5; b++) {
-      const bx = ((b * 80 + frame * 0.8) % W);
-      const by = ly + 6 + Math.sin(frame * 0.05 + b) * 3;
-      ctx.fillStyle = 'rgba(255,150,50,0.5)';
-      ctx.beginPath(); ctx.arc(bx, by, 4 + Math.sin(frame * 0.1 + b*2) * 2, 0, Math.PI * 2); ctx.fill();
+    for (let b = 0; b < 6; b++) {
+      const bx = ((b * 68 + cameraX * 0.2 + frame * 0.7) % W + W) % W;
+      const by = ly + 5 + Math.sin(frame * 0.06 + b * 1.4) * 3;
+      ctx.fillStyle = `rgba(255,160,40,${0.45 + 0.25 * Math.sin(frame * 0.12 + b * 2.1)})`;
+      ctx.beginPath(); ctx.arc(bx, by, 3 + Math.sin(frame * 0.1 + b*2) * 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Lava jets — world-space columns that periodically spurt upward
+    const jetPositions = [180, 420, 680, 950, 1300, 1640, 2000, 2500, 3100];
+    for (const jwx of jetPositions) {
+      const jsx = jwx - cameraX;
+      if (jsx < -20 || jsx > W + 20) continue;
+      const jetPhase = (frame * 0.04 + jwx * 0.0023) % (Math.PI * 2);
+      const active = Math.sin(jetPhase) > 0.6;
+      if (!active) continue;
+      const jetH = 18 + Math.sin(jetPhase * 3) * 8;
+      const jetAlpha = (Math.sin(jetPhase) - 0.6) / 0.4;
+
+      ctx.shadowColor = '#ff5500'; ctx.shadowBlur = 12 * jetAlpha;
+      const jg = ctx.createLinearGradient(jsx, ly - jetH, jsx, ly);
+      jg.addColorStop(0,   `rgba(255,200,50,0)`);
+      jg.addColorStop(0.3, `rgba(255,130,20,${jetAlpha * 0.7})`);
+      jg.addColorStop(1,   `rgba(255,80,0,${jetAlpha})`);
+      ctx.fillStyle = jg;
+      ctx.beginPath();
+      ctx.ellipse(jsx, ly - jetH/2, 4 + jetAlpha * 3, jetH/2, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      // Droplets above jet
+      for (let d = 0; d < 3; d++) {
+        const dx = jsx + (d - 1) * 7 * jetAlpha;
+        const dy = ly - jetH - d * 6 * jetAlpha;
+        ctx.fillStyle = `rgba(255,150,30,${jetAlpha * (0.7 - d * 0.2)})`;
+        ctx.beginPath(); ctx.arc(dx, dy, 2.5 - d * 0.5, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.shadowBlur = 0;
     }
 
     // Danger warning when lava is close to player
@@ -638,24 +802,24 @@
       const warnAlpha = danger * (0.5 + 0.3 * Math.sin(frame * 0.2));
       ctx.fillStyle = `rgba(239,68,68,${warnAlpha * 0.18})`;
       ctx.fillRect(0, 0, W, H);
-      // Warning border
-      ctx.strokeStyle = `rgba(239,68,68,${warnAlpha * 0.7})`;
+      ctx.strokeStyle = `rgba(239,68,68,${warnAlpha * 0.75})`;
       ctx.lineWidth = 3;
       ctx.strokeRect(1, 1, W - 2, H - 2);
     }
   }
 
+  /* ── Particles ───────────────────────────────────────────────────── */
   function drawParticles() {
-    particles.forEach(p => {
+    for (const p of particles) {
       ctx.globalAlpha = p.life;
       ctx.fillStyle = p.color;
       ctx.beginPath(); ctx.arc(w2s(p.wx), p.y, Math.max(0.5, p.r * p.life), 0, Math.PI * 2); ctx.fill();
-    });
+    }
     ctx.globalAlpha = 1;
   }
 
+  /* ── HUD ─────────────────────────────────────────────────────────── */
   function drawHUD() {
-    // Lava height gauge (right side)
     const gaugeH = 80, gx = W - 14, gy = 12;
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.beginPath(); ctx.roundRect(gx, gy, 8, gaugeH, 4); ctx.fill();
@@ -674,10 +838,12 @@
   }
 
   function drawOverlay(title, sub, col) {
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     ctx.fillStyle = col; ctx.font = 'bold 26px sans-serif';
+    ctx.shadowColor = col; ctx.shadowBlur = 16;
     ctx.fillText(title, W/2, H/2 - 22);
+    ctx.shadowBlur = 0;
     ctx.fillStyle = '#e2e8f0'; ctx.font = '13px sans-serif';
     ctx.fillText(sub, W/2, H/2 + 4);
     ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '11px sans-serif';
@@ -710,7 +876,6 @@
       winTimer++;
     }
 
-    // DRAW
     drawBg();
     platforms.forEach(drawPlatform);
     spikes.forEach(drawSpike);
@@ -719,18 +884,18 @@
     sawblades.forEach(drawSawblade);
     drawLava();
     drawParticles();
-    if (state !== 'dead' && state !== 'dead-out') drawPlayer();
+    if (state !== 'dead') drawPlayer();
     drawHUD();
     drawRespawnFlash();
 
-    if (state === 'dead')        drawOverlay('💀 Game Over', `Edelsteine: ${score}`, '#ef4444');
-    if (state === 'respawning')  {
+    if (state === 'dead')       drawOverlay('💀 Game Over', `Edelsteine: ${score}`, '#ef4444');
+    if (state === 'respawning') {
       ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0,0,W,H);
       ctx.textAlign = 'center'; ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 18px sans-serif'; ctx.fillText('💔 Checkpoint…', W/2, H/2);
       ctx.textAlign = 'left';
     }
-    if (state === 'win')         drawOverlay('🎉 Geschafft!', `Edelsteine: ${score} | Zeit: ${Math.floor(frame/60)}s`, '#fbbf24');
+    if (state === 'win') drawOverlay('🎉 Geschafft!', `Edelsteine: ${score} | Zeit: ${Math.floor(frame/60)}s`, '#fbbf24');
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -743,7 +908,6 @@
     if (down && (state === 'dead' || state === 'win')) { init(); }
   }
 
-  // On-screen buttons
   const leftBtn  = document.getElementById('ob-left');
   const rightBtn = document.getElementById('ob-right');
   const jumpBtn  = document.getElementById('ob-jump');
@@ -763,7 +927,6 @@
 
   canvas.addEventListener('click', () => { if (state === 'dead' || state === 'win') init(); });
 
-  // Swipe support
   let swX = 0, swY = 0;
   canvas.addEventListener('touchstart', e => { e.preventDefault(); swX = e.touches[0].clientX; swY = e.touches[0].clientY; }, { passive: false });
   canvas.addEventListener('touchend', e => {
@@ -793,7 +956,6 @@
     cancelAnimationFrame(raf);
   };
 
-  // Back button
   document.getElementById('obby-back').addEventListener('click', () => {
     if (typeof goHome === 'function') goHome();
   });
