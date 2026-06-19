@@ -136,11 +136,25 @@
         <div class="score-box"><span class="label">Zerstörung</span><span id="planet-score">0%</span></div>
       </header>
       <canvas id="planet-canvas"></canvas>
+      <div id="planet-picker">
+        <button class="planet-btn active" data-planet="earth"   title="Erde">🌍</button>
+        <button class="planet-btn"        data-planet="mars"    title="Mars">🪨</button>
+        <button class="planet-btn"        data-planet="gas"     title="Gasriese">🪐</button>
+        <button class="planet-btn"        data-planet="ice"     title="Eisplanet">❄️</button>
+        <button class="planet-btn"        data-planet="lava"    title="Lavaplanet">🌋</button>
+        <button class="planet-btn"        data-planet="moon"    title="Mond">🌑</button>
+        <button class="planet-btn"        data-planet="ocean"   title="Ozeanwelt">🌊</button>
+        <button class="planet-btn"        data-planet="alien"   title="Alienplanet">👽</button>
+      </div>
       <div id="weapon-bar">
-        <button class="weapon-btn active" data-weapon="missile" title="Rakete">💣</button>
-        <button class="weapon-btn" data-weapon="laser"    title="Laser">🔴</button>
-        <button class="weapon-btn" data-weapon="asteroid" title="Asteroid">☄️</button>
-        <button class="weapon-btn" data-weapon="nuke"     title="Atombombe">💥</button>
+        <button class="weapon-btn active" data-weapon="missile"   title="Rakete">💣</button>
+        <button class="weapon-btn"        data-weapon="laser"     title="Laser">🔴</button>
+        <button class="weapon-btn"        data-weapon="asteroid"  title="Asteroid">☄️</button>
+        <button class="weapon-btn"        data-weapon="nuke"      title="Atombombe">💥</button>
+        <button class="weapon-btn"        data-weapon="blackhole" title="Schwarzes Loch">🕳️</button>
+        <button class="weapon-btn"        data-weapon="ioncannon" title="Ionenkanone">⚡</button>
+        <button class="weapon-btn"        data-weapon="meteors"   title="Meteorregen">🌠</button>
+        <button class="weapon-btn"        data-weapon="solarflare" title="Sonneneruption">☀️</button>
       </div>
       <button id="planet-reset" class="action-btn">🌍 Neuer Planet</button>
     </div>

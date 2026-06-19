@@ -1,90 +1,25 @@
 /* ══ Planet Smash ════════════════════════════════════════════════════════ */
 (function () {
-  const canvas  = document.getElementById('planet-canvas');
-  const ctx     = canvas.getContext('2d');
-  const scoreEl = document.getElementById('planet-score');
+  const canvas   = document.getElementById('planet-canvas');
+  const ctx      = canvas.getContext('2d');
+  const scoreEl  = document.getElementById('planet-score');
   const resetBtn = document.getElementById('planet-reset');
 
-  const SIZE = 300;
-  canvas.width  = SIZE;
-  canvas.height = SIZE;
-  const CX = SIZE / 2, CY = SIZE / 2;
-  const PLANET_R = 108;
+  const SIZE = 320;
+  canvas.width = canvas.height = SIZE;
+  const CX = SIZE / 2, CY = SIZE / 2, PR = 122; // planet radius
 
-  let running = false, raf;
+  let running = false, raf, frame = 0;
+  let currentPlanetType = 'earth';
   let weapon = 'missile';
-  let craters, projectiles, particles, shakeTimer, shakeAmt;
-  let hp, planetSeed;
-  let planetOffscreen;
-  let frame = 0;
+  let craters, projectiles, particles, effects;
+  let hp, rotOffset, shakeTimer, shakeAmt;
+  let planetOff;  // offscreen canvas for planet texture (width = SIZE*2 for wrap)
+  let destroyed = false;
+  let destroyTimer = 0;
+  let chunks = [];
 
-  /* ── weapon select ────────────────────────────────────────────────── */
-  document.querySelectorAll('.weapon-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.weapon-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      weapon = btn.dataset.weapon;
-    });
-  });
-
-  resetBtn.addEventListener('click', () => { buildPlanet(); craters = []; hp = 100; updateScore(); });
-
-  /* ── planet texture ───────────────────────────────────────────────── */
-  function buildPlanet() {
-    planetSeed = Math.random() * 9999 | 0;
-    planetOffscreen = document.createElement('canvas');
-    planetOffscreen.width  = SIZE;
-    planetOffscreen.height = SIZE;
-    const pc = planetOffscreen.getContext('2d');
-
-    // base ocean
-    const hue = Math.floor(Math.random() * 360);
-    const ocean = pc.createRadialGradient(CX - 30, CY - 30, 10, CX, CY, PLANET_R);
-    ocean.addColorStop(0,   `hsl(${hue},60%,55%)`);
-    ocean.addColorStop(0.5, `hsl(${hue},55%,38%)`);
-    ocean.addColorStop(1,   `hsl(${hue},50%,22%)`);
-    pc.fillStyle = ocean;
-    pc.beginPath(); pc.arc(CX, CY, PLANET_R, 0, Math.PI * 2); pc.fill();
-
-    // continent blobs
-    const rng = mulberry32(planetSeed);
-    pc.fillStyle = `hsl(${(hue + 90) % 360},50%,42%)`;
-    for (let i = 0; i < 8; i++) {
-      const angle = rng() * Math.PI * 2;
-      const dist  = rng() * PLANET_R * 0.7;
-      const bx    = CX + Math.cos(angle) * dist;
-      const by    = CY + Math.sin(angle) * dist;
-      const br    = 18 + rng() * 32;
-      pc.beginPath();
-      pc.arc(bx, by, br, 0, Math.PI * 2);
-      pc.fill();
-    }
-
-    // clip to circle
-    pc.globalCompositeOperation = 'destination-in';
-    pc.beginPath(); pc.arc(CX, CY, PLANET_R, 0, Math.PI * 2); pc.fill();
-    pc.globalCompositeOperation = 'source-over';
-
-    // ice caps
-    pc.fillStyle = 'rgba(220,240,255,0.55)';
-    pc.beginPath(); pc.arc(CX, CY - PLANET_R + 14, 26, 0, Math.PI * 2); pc.fill();
-    pc.beginPath(); pc.arc(CX, CY + PLANET_R - 14, 20, 0, Math.PI * 2); pc.fill();
-
-    // atmosphere rim
-    const atm = pc.createRadialGradient(CX, CY, PLANET_R * 0.85, CX, CY, PLANET_R);
-    atm.addColorStop(0, 'rgba(150,210,255,0)');
-    atm.addColorStop(1, 'rgba(100,180,255,0.45)');
-    pc.fillStyle = atm;
-    pc.beginPath(); pc.arc(CX, CY, PLANET_R, 0, Math.PI * 2); pc.fill();
-
-    // specular
-    const spec = pc.createRadialGradient(CX - 38, CY - 38, 4, CX - 28, CY - 28, 65);
-    spec.addColorStop(0, 'rgba(255,255,255,0.35)');
-    spec.addColorStop(1, 'rgba(255,255,255,0)');
-    pc.fillStyle = spec;
-    pc.beginPath(); pc.arc(CX, CY, PLANET_R, 0, Math.PI * 2); pc.fill();
-  }
-
+  /* ── RNG ──────────────────────────────────────────────────────────── */
   function mulberry32(seed) {
     return function () {
       seed |= 0; seed = seed + 0x6D2B79F5 | 0;
@@ -94,126 +29,675 @@
     };
   }
 
-  /* ── particle helpers ─────────────────────────────────────────────── */
-  function burst(x, y, color, n, speed = 5) {
+  /* ══ PLANET BUILDERS ═════════════════════════════════════════════════ */
+  // Each builder draws onto a (SIZE*2 × SIZE) canvas so we can scroll it for rotation.
+
+  function buildEarth(pc, rng, W) {
+    // Deep ocean base
+    const ocean = pc.createRadialGradient(W * 0.4, CY - 20, 10, W * 0.5, CY, PR * 1.1);
+    ocean.addColorStop(0,   '#2a7fc0');
+    ocean.addColorStop(0.5, '#1a5ea8');
+    ocean.addColorStop(1,   '#0d3660');
+    pc.fillStyle = ocean;
+    fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Continents – green/brown irregular blobs
+    const contColors = ['#2d7a2d','#3a8c2d','#5d4e37','#4a7c3a','#6b5233'];
+    for (let i = 0; i < 14; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.75;
+      const bx    = W / 2 + Math.cos(angle) * dist;
+      const by    = CY + Math.sin(angle) * dist;
+      const br    = 14 + rng() * 28;
+      pc.fillStyle = contColors[i % contColors.length];
+      pc.beginPath(); pc.arc(bx, by, br, 0, Math.PI * 2); pc.fill();
+      // sub-blob for shape variation
+      pc.fillStyle = contColors[(i + 2) % contColors.length];
+      pc.beginPath(); pc.arc(bx + rng() * 14 - 7, by + rng() * 14 - 7, br * 0.6, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Mountain ridges (darker thin strokes on some continents)
+    pc.strokeStyle = 'rgba(60,35,10,0.35)';
+    pc.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const mx = W / 2 + (rng() - 0.5) * PR * 1.2;
+      const my = CY + (rng() - 0.5) * PR * 1.2;
+      pc.beginPath(); pc.moveTo(mx, my); pc.lineTo(mx + (rng()-0.5)*20, my + (rng()-0.5)*20); pc.stroke();
+    }
+
+    // Polar ice caps
+    pc.fillStyle = 'rgba(230,245,255,0.85)';
+    pc.beginPath(); pc.arc(W / 2, CY - PR + 10, 28, 0, Math.PI * 2); pc.fill();
+    pc.beginPath(); pc.arc(W / 2, CY + PR - 10, 18, 0, Math.PI * 2); pc.fill();
+    // Ice cap edge softening
+    const iceFade = pc.createRadialGradient(W / 2, CY - PR + 10, 12, W / 2, CY - PR + 10, 32);
+    iceFade.addColorStop(0, 'rgba(220,240,255,0.6)');
+    iceFade.addColorStop(1, 'rgba(220,240,255,0)');
+    pc.fillStyle = iceFade; fillCircle(pc, W / 2, CY - PR + 10, 38);
+
+    // Cloud wisps
+    pc.fillStyle = 'rgba(255,255,255,0.28)';
+    for (let i = 0; i < 8; i++) {
+      const cx2 = W / 2 + (rng() - 0.5) * PR * 1.4;
+      const cy2 = CY + (rng() - 0.5) * PR * 1.2;
+      pc.beginPath(); pc.ellipse(cx2, cy2, 30 + rng() * 22, 8 + rng() * 6, rng() * Math.PI, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Blue atmosphere glow at rim
+    const atm = pc.createRadialGradient(W / 2, CY, PR * 0.82, W / 2, CY, PR);
+    atm.addColorStop(0, 'rgba(80,160,255,0)');
+    atm.addColorStop(1, 'rgba(80,160,255,0.55)');
+    pc.fillStyle = atm; fillCircle(pc, W / 2, CY, PR);
+  }
+
+  function buildMars(pc, rng, W) {
+    const base = pc.createRadialGradient(W * 0.38, CY - 25, 8, W / 2, CY, PR);
+    base.addColorStop(0,   '#d45f2a');
+    base.addColorStop(0.5, '#a83510');
+    base.addColorStop(1,   '#6b1e08');
+    pc.fillStyle = base; fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Surface variation – lighter/darker patches
+    for (let i = 0; i < 12; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.8;
+      const bx    = W / 2 + Math.cos(angle) * dist;
+      const by    = CY + Math.sin(angle) * dist;
+      const br    = 12 + rng() * 30;
+      pc.fillStyle = rng() > 0.5 ? 'rgba(200,100,40,0.35)' : 'rgba(80,20,5,0.4)';
+      pc.beginPath(); pc.arc(bx, by, br, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Natural craters (pre-baked)
+    for (let i = 0; i < 7; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.7;
+      const bx    = W / 2 + Math.cos(angle) * dist;
+      const by    = CY + Math.sin(angle) * dist;
+      const br    = 6 + rng() * 14;
+      const cg    = pc.createRadialGradient(bx, by, 0, bx, by, br);
+      cg.addColorStop(0, 'rgba(30,8,2,0.9)'); cg.addColorStop(0.7, 'rgba(80,20,5,0.5)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
+      pc.fillStyle = cg; pc.beginPath(); pc.arc(bx, by, br, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Dust storm swirl
+    pc.strokeStyle = 'rgba(220,150,80,0.22)';
+    pc.lineWidth = 8;
+    pc.beginPath();
+    pc.arc(W / 2 + 20, CY - 10, 40, 0.2, 2.8);
+    pc.stroke();
+
+    // Thin north polar cap
+    pc.fillStyle = 'rgba(230,240,255,0.65)';
+    pc.beginPath(); pc.arc(W / 2, CY - PR + 8, 16, 0, Math.PI * 2); pc.fill();
+
+    // Thin pink-orange atmosphere
+    const atm = pc.createRadialGradient(W / 2, CY, PR * 0.88, W / 2, CY, PR);
+    atm.addColorStop(0, 'rgba(220,100,40,0)');
+    atm.addColorStop(1, 'rgba(220,100,40,0.38)');
+    pc.fillStyle = atm; fillCircle(pc, W / 2, CY, PR);
+  }
+
+  function buildGas(pc, rng, W) {
+    // Base cream
+    pc.fillStyle = '#dbc89a'; fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Horizontal bands
+    const bands = [
+      { y: -1.0, h: 0.20, color: 'rgba(180,130,70,0.7)' },
+      { y: -0.75, h: 0.15, color: 'rgba(220,190,140,0.5)' },
+      { y: -0.55, h: 0.25, color: 'rgba(160,100,50,0.65)' },
+      { y: -0.28, h: 0.18, color: 'rgba(200,160,100,0.45)' },
+      { y: -0.08, h: 0.22, color: 'rgba(140,80,40,0.55)' },
+      { y:  0.16, h: 0.28, color: 'rgba(210,175,120,0.5)' },
+      { y:  0.46, h: 0.20, color: 'rgba(155,95,45,0.6)' },
+      { y:  0.68, h: 0.18, color: 'rgba(225,195,150,0.4)' },
+      { y:  0.88, h: 0.20, color: 'rgba(170,110,55,0.55)' },
+    ];
+    pc.save();
+    pc.beginPath(); pc.arc(W / 2, CY, PR, 0, Math.PI * 2); pc.clip();
+    bands.forEach(b => {
+      const by = CY + b.y * PR;
+      const bh = b.h * PR * 2;
+      pc.fillStyle = b.color;
+      // wavy band using bezier
+      pc.beginPath();
+      pc.moveTo(W / 2 - PR - 10, by);
+      const wave = 4;
+      pc.bezierCurveTo(W / 2 - PR / 2, by - wave, W / 2 + PR / 2, by + wave, W / 2 + PR + 10, by);
+      pc.lineTo(W / 2 + PR + 10, by + bh);
+      pc.bezierCurveTo(W / 2 + PR / 2, by + bh + wave, W / 2 - PR / 2, by + bh - wave, W / 2 - PR - 10, by + bh);
+      pc.closePath(); pc.fill();
+    });
+
+    // Great Red Spot
+    const spotX = W / 2 + 18, spotY = CY + 22;
+    const spotG = pc.createRadialGradient(spotX, spotY, 2, spotX, spotY, 20);
+    spotG.addColorStop(0, 'rgba(180,50,30,0.85)');
+    spotG.addColorStop(0.5, 'rgba(160,60,40,0.6)');
+    spotG.addColorStop(1, 'rgba(140,70,40,0)');
+    pc.fillStyle = spotG;
+    pc.beginPath(); pc.ellipse(spotX, spotY, 22, 13, -0.2, 0, Math.PI * 2); pc.fill();
+    pc.restore();
+
+    // Atmosphere – subtle brown-orange glow
+    const atm = pc.createRadialGradient(W / 2, CY, PR * 0.87, W / 2, CY, PR);
+    atm.addColorStop(0, 'rgba(200,160,80,0)');
+    atm.addColorStop(1, 'rgba(200,160,80,0.4)');
+    pc.fillStyle = atm; fillCircle(pc, W / 2, CY, PR);
+  }
+
+  function buildIce(pc, rng, W) {
+    const base = pc.createRadialGradient(W * 0.38, CY - 30, 5, W / 2, CY, PR);
+    base.addColorStop(0,   '#eef7ff');
+    base.addColorStop(0.5, '#c5dff0');
+    base.addColorStop(1,   '#7bafc8');
+    pc.fillStyle = base; fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Ice patches
+    for (let i = 0; i < 10; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.8;
+      pc.fillStyle = `rgba(200,230,255,${0.2 + rng() * 0.3})`;
+      pc.beginPath(); pc.arc(W / 2 + Math.cos(angle) * dist, CY + Math.sin(angle) * dist, 15 + rng() * 25, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Ice rifts (cracks)
+    pc.strokeStyle = 'rgba(120,185,220,0.65)';
+    pc.lineWidth = 1.5;
+    for (let i = 0; i < 10; i++) {
+      const sx = W / 2 + (rng() - 0.5) * PR * 1.2;
+      const sy = CY + (rng() - 0.5) * PR * 1.2;
+      pc.beginPath(); pc.moveTo(sx, sy);
+      for (let j = 0; j < 3; j++) pc.lineTo(sx + (rng()-0.5)*40, sy + (rng()-0.5)*40);
+      pc.stroke();
+    }
+
+    // Thick pale atmosphere
+    const atm = pc.createRadialGradient(W / 2, CY, PR * 0.80, W / 2, CY, PR);
+    atm.addColorStop(0, 'rgba(180,230,255,0)');
+    atm.addColorStop(1, 'rgba(180,230,255,0.65)');
+    pc.fillStyle = atm; fillCircle(pc, W / 2, CY, PR);
+  }
+
+  function buildLava(pc, rng, W) {
+    // Dark base
+    pc.fillStyle = '#0e0804'; fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Lava rivers network
+    pc.save();
+    pc.beginPath(); pc.arc(W / 2, CY, PR, 0, Math.PI * 2); pc.clip();
+    for (let i = 0; i < 18; i++) {
+      const sx = W / 2 + (rng() - 0.5) * PR * 2;
+      const sy = CY + (rng() - 0.5) * PR * 2;
+      const ex = W / 2 + (rng() - 0.5) * PR * 2;
+      const ey = CY + (rng() - 0.5) * PR * 2;
+      const heat = rng();
+      const lavaCols = ['#ff6a00','#ff4500','#ff8c00','#ffd700'];
+      pc.strokeStyle = lavaCols[Math.floor(rng() * lavaCols.length)];
+      pc.globalAlpha = 0.5 + heat * 0.4;
+      pc.lineWidth = 1 + rng() * 3;
+      pc.beginPath(); pc.moveTo(sx, sy);
+      pc.quadraticCurveTo(W / 2 + (rng()-0.5)*60, CY + (rng()-0.5)*60, ex, ey);
+      pc.stroke();
+    }
+    pc.globalAlpha = 1;
+
+    // Lava pools (bright spots)
+    for (let i = 0; i < 5; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.7;
+      const bx    = W / 2 + Math.cos(angle) * dist;
+      const by    = CY + Math.sin(angle) * dist;
+      const poolG = pc.createRadialGradient(bx, by, 0, bx, by, 12 + rng() * 10);
+      poolG.addColorStop(0, '#fff700'); poolG.addColorStop(0.4, '#ff6a00'); poolG.addColorStop(1, 'rgba(255,50,0,0)');
+      pc.fillStyle = poolG; pc.beginPath(); pc.arc(bx, by, 22, 0, Math.PI * 2); pc.fill();
+    }
+    pc.restore();
+
+    // Orange atmosphere glow
+    const atm = pc.createRadialGradient(W / 2, CY, PR * 0.85, W / 2, CY, PR);
+    atm.addColorStop(0, 'rgba(255,80,0,0)');
+    atm.addColorStop(1, 'rgba(255,80,0,0.55)');
+    pc.fillStyle = atm; fillCircle(pc, W / 2, CY, PR);
+  }
+
+  function buildMoon(pc, rng, W) {
+    const base = pc.createRadialGradient(W * 0.38, CY - 25, 5, W / 2, CY, PR);
+    base.addColorStop(0,   '#c8c8c8');
+    base.addColorStop(0.5, '#909090');
+    base.addColorStop(1,   '#505050');
+    pc.fillStyle = base; fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Many pre-baked craters
+    for (let i = 0; i < 18; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.82;
+      const bx    = W / 2 + Math.cos(angle) * dist;
+      const by    = CY + Math.sin(angle) * dist;
+      const br    = 4 + rng() * 18;
+      const cg    = pc.createRadialGradient(bx, by, 0, bx, by, br);
+      cg.addColorStop(0, 'rgba(30,30,30,0.95)'); cg.addColorStop(0.55, 'rgba(70,70,70,0.7)'); cg.addColorStop(0.85, 'rgba(180,180,180,0.3)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
+      pc.fillStyle = cg; pc.beginPath(); pc.arc(bx, by, br, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Terminator shadow (hard shadow one side)
+    const shadow = pc.createLinearGradient(W / 2 - PR, CY, W / 2 + PR * 0.3, CY);
+    shadow.addColorStop(0, 'rgba(0,0,0,0.0)');
+    shadow.addColorStop(0.65, 'rgba(0,0,0,0.0)');
+    shadow.addColorStop(1,   'rgba(0,0,0,0.55)');
+    pc.fillStyle = shadow; fillCircle(pc, W / 2, CY, PR);
+
+    // No atmosphere (edges stay dark – done by clip)
+  }
+
+  function buildOcean(pc, rng, W) {
+    const base = pc.createRadialGradient(W * 0.4, CY - 20, 5, W / 2, CY, PR);
+    base.addColorStop(0,   '#1a6e9c');
+    base.addColorStop(0.5, '#0d4b75');
+    base.addColorStop(1,   '#062b4a');
+    pc.fillStyle = base; fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Wave swirls
+    pc.save();
+    pc.beginPath(); pc.arc(W / 2, CY, PR, 0, Math.PI * 2); pc.clip();
+    pc.strokeStyle = 'rgba(80,180,220,0.2)';
+    pc.lineWidth = 3;
+    for (let i = 0; i < 10; i++) {
+      const cx2 = W / 2 + (rng() - 0.5) * PR * 1.5;
+      const cy2 = CY + (rng() - 0.5) * PR * 1.5;
+      const r2  = 20 + rng() * 40;
+      pc.beginPath(); pc.arc(cx2, cy2, r2, 0, Math.PI * 2); pc.stroke();
+    }
+    pc.restore();
+
+    // Reflection highlight
+    const refl = pc.createRadialGradient(W / 2 - 30, CY - 30, 2, W / 2 - 20, CY - 20, 50);
+    refl.addColorStop(0, 'rgba(180,230,255,0.35)');
+    refl.addColorStop(1, 'rgba(180,230,255,0)');
+    pc.fillStyle = refl; fillCircle(pc, W / 2 - 20, CY - 20, 55);
+
+    // Thick blue atmosphere
+    const atm = pc.createRadialGradient(W / 2, CY, PR * 0.80, W / 2, CY, PR);
+    atm.addColorStop(0, 'rgba(40,140,220,0)');
+    atm.addColorStop(1, 'rgba(40,140,220,0.65)');
+    pc.fillStyle = atm; fillCircle(pc, W / 2, CY, PR);
+  }
+
+  function buildAlien(pc, rng, W) {
+    const base = pc.createRadialGradient(W * 0.4, CY - 20, 5, W / 2, CY, PR);
+    base.addColorStop(0,   '#4a1f7c');
+    base.addColorStop(0.5, '#2d1050');
+    base.addColorStop(1,   '#160830');
+    pc.fillStyle = base; fillCircle(pc, W / 2, CY, PR + 2);
+
+    // Alien crystal formations – teal/cyan blobs
+    for (let i = 0; i < 10; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.75;
+      const bx    = W / 2 + Math.cos(angle) * dist;
+      const by    = CY + Math.sin(angle) * dist;
+      const br    = 10 + rng() * 22;
+      pc.fillStyle = rng() > 0.5 ? `rgba(0,200,180,0.4)` : `rgba(100,50,200,0.4)`;
+      pc.beginPath(); pc.arc(bx, by, br, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Bioluminescent spots
+    for (let i = 0; i < 8; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist  = rng() * PR * 0.7;
+      const bx    = W / 2 + Math.cos(angle) * dist;
+      const by    = CY + Math.sin(angle) * dist;
+      const glow  = pc.createRadialGradient(bx, by, 0, bx, by, 12);
+      glow.addColorStop(0, 'rgba(0,255,180,0.8)');
+      glow.addColorStop(1, 'rgba(0,255,180,0)');
+      pc.fillStyle = glow; pc.beginPath(); pc.arc(bx, by, 12, 0, Math.PI * 2); pc.fill();
+    }
+
+    // Purple-green atmosphere
+    const atm = pc.createRadialGradient(W / 2, CY, PR * 0.83, W / 2, CY, PR);
+    atm.addColorStop(0, 'rgba(100,0,200,0)');
+    atm.addColorStop(0.5, 'rgba(80,200,100,0.2)');
+    atm.addColorStop(1,   'rgba(120,0,255,0.55)');
+    pc.fillStyle = atm; fillCircle(pc, W / 2, CY, PR);
+  }
+
+  function fillCircle(pc2, x, y, r) {
+    pc2.beginPath(); pc2.arc(x, y, r, 0, Math.PI * 2); pc2.fill();
+  }
+
+  const BUILDERS = { earth: buildEarth, mars: buildMars, gas: buildGas, ice: buildIce, lava: buildLava, moon: buildMoon, ocean: buildOcean, alien: buildAlien };
+
+  function buildPlanet() {
+    const W = SIZE * 2; // wide for horizontal scroll
+    planetOff = document.createElement('canvas');
+    planetOff.width = W; planetOff.height = SIZE;
+    const pc  = planetOff.getContext('2d');
+    const rng = mulberry32(Math.random() * 99999 | 0);
+
+    // Draw the texture mirrored twice so wrapping is seamless
+    for (const ox of [0, SIZE]) {
+      pc.save(); pc.translate(ox, 0);
+      const builder = BUILDERS[currentPlanetType] || buildEarth;
+      builder(pc, rng, SIZE);
+      pc.restore();
+    }
+
+    // Clip each half to a circle
+    const clip = document.createElement('canvas');
+    clip.width = SIZE; clip.height = SIZE;
+    const cc = clip.getContext('2d');
+    for (let half = 0; half < 2; half++) {
+      cc.clearRect(0, 0, SIZE, SIZE);
+      cc.save();
+      cc.beginPath(); cc.arc(CX, CY, PR, 0, Math.PI * 2); cc.clip();
+      cc.drawImage(planetOff, -half * SIZE, 0);
+      cc.restore();
+      // copy clipped half back
+      const pc2 = planetOff.getContext('2d');
+      pc2.clearRect(half * SIZE, 0, SIZE, SIZE);
+      pc2.drawImage(clip, half * SIZE, 0);
+    }
+
+    // Add specular shine on top of both halves
+    const spc = planetOff.getContext('2d');
+    for (const ox of [0, SIZE]) {
+      const spec = spc.createRadialGradient(ox + CX - 40, CY - 40, 3, ox + CX - 28, CY - 28, 60);
+      spec.addColorStop(0, 'rgba(255,255,255,0.32)');
+      spec.addColorStop(1, 'rgba(255,255,255,0)');
+      spc.save();
+      spc.beginPath(); spc.arc(ox + CX, CY, PR, 0, Math.PI * 2); spc.clip();
+      spc.fillStyle = spec; spc.fillRect(ox, 0, SIZE, SIZE);
+      spc.restore();
+    }
+  }
+
+  /* ══ PARTICLE / EFFECT HELPERS ═══════════════════════════════════════ */
+  function burst(x, y, color, n, spd = 5, lifeDecay = 0.025) {
     for (let i = 0; i < n; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const spd   = 1 + Math.random() * speed;
-      particles.push({
-        x, y,
-        vx: Math.cos(angle) * spd,
-        vy: Math.sin(angle) * spd,
-        life: 1, r: 2 + Math.random() * 4, color
+      const s     = 0.5 + Math.random() * spd;
+      particles.push({ x, y, vx: Math.cos(angle)*s, vy: Math.sin(angle)*s, life: 1, r: 2 + Math.random()*4, color, decay: lifeDecay });
+    }
+  }
+
+  function addChunks(x, y) {
+    const colors = { earth:'#2d7a2d', mars:'#a83510', gas:'#c09050', ice:'#c5dff0', lava:'#1a0800', moon:'#909090', ocean:'#0d4b75', alien:'#4a1f7c' };
+    const col = colors[currentPlanetType] || '#808080';
+    for (let i = 0; i < 10; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const spd   = 3 + Math.random() * 6;
+      chunks.push({ x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd - 2, r: 4 + Math.random()*10, rot: Math.random()*Math.PI*2, rotV: (Math.random()-0.5)*0.2, life: 1, color: col, decay: 0.015 });
+    }
+  }
+
+  /* ══ WEAPON DEFINITIONS ══════════════════════════════════════════════ */
+  const WEAPON_CFG = {
+    missile:   { spd: 6,  craterR: 0.22, dmg: 5,  pn: 14, pSpd: 5,  shake: [8, 12],  col: '#f97316', emoji: '💣', size: 18 },
+    laser:     { spd: 22, craterR: 0.10, dmg: 3,  pn: 5,  pSpd: 3,  shake: [0, 0],   col: '#ef4444', emoji: null, size: 0 },
+    asteroid:  { spd: 3.5,craterR: 0.35, dmg: 9,  pn: 24, pSpd: 6,  shake: [18, 20], col: '#78716c', emoji: '☄️', size: 22 },
+    nuke:      { spd: 4,  craterR: 0.60, dmg: 22, pn: 50, pSpd: 10, shake: [35, 30], col: '#fbbf24', emoji: '💥', size: 28 },
+    blackhole: { spd: 0,  craterR: 0.70, dmg: 30, pn: 0,  pSpd: 0,  shake: [20, 60], col: '#7c3aed', emoji: '🕳️', size: 30 },
+    ioncannon: { spd: 30, craterR: 0.08, dmg: 4,  pn: 4,  pSpd: 4,  shake: [3, 5],   col: '#22d3ee', emoji: null, size: 0 },
+    meteors:   { spd: 5,  craterR: 0.12, dmg: 2,  pn: 6,  pSpd: 4,  shake: [4, 8],   col: '#a78bfa', emoji: '🌠', size: 14 },
+    solarflare:{ spd: 0,  craterR: 0.18, dmg: 15, pn: 30, pSpd: 8,  shake: [12, 25], col: '#fde68a', emoji: null, size: 0 },
+  };
+
+  /* ══ FIRE ════════════════════════════════════════════════════════════ */
+  function fire(mx, my) {
+    if (!running || destroyed) return;
+    const cfg = WEAPON_CFG[weapon];
+
+    if (weapon === 'blackhole') {
+      fireBlackhole(mx, my);
+    } else if (weapon === 'meteors') {
+      fireMeteors();
+    } else if (weapon === 'solarflare') {
+      fireSolarFlare();
+    } else {
+      const dx  = CX - mx, dy = CY - my;
+      const len = Math.hypot(dx, dy) || 1;
+      projectiles.push({
+        x: mx, y: my,
+        vx: (dx / len) * cfg.spd,
+        vy: (dy / len) * cfg.spd,
+        weapon, cfg, trail: [],
+        isBeam: weapon === 'laser' || weapon === 'ioncannon',
+        trailX: mx, trailY: my,
       });
     }
   }
 
-  /* ── fire ─────────────────────────────────────────────────────────── */
-  function fire(mx, my) {
-    if (!running) return;
-    const configs = {
-      missile:  { emoji: '💣', speed: 6,  r: 0.22, dmg: 3,  pn: 12, color: '#f97316' },
-      laser:    { emoji: null,  speed: 18, r: 0.12, dmg: 2,  pn: 6,  color: '#ef4444' },
-      asteroid: { emoji: '☄️', speed: 4,  r: 0.32, dmg: 7,  pn: 20, color: '#78716c' },
-      nuke:     { emoji: '💥', speed: 5,  r: 0.55, dmg: 18, pn: 40, color: '#fbbf24' },
-    };
-    const cfg = configs[weapon];
-    const dx = CX - mx, dy = CY - my;
-    const len = Math.hypot(dx, dy) || 1;
-    projectiles.push({
-      x: mx, y: my,
-      vx: (dx / len) * cfg.speed,
-      vy: (dy / len) * cfg.speed,
-      weapon,
-      cfg,
-      trail: [],
-      laser: weapon === 'laser',
+  function fireBlackhole(mx, my) {
+    // Clamp position near planet edge
+    const angle = Math.atan2(my - CY, mx - CX);
+    const dist  = PR + 20;
+    effects.push({
+      type: 'blackhole',
+      x: CX + Math.cos(angle) * dist,
+      y: CY + Math.sin(angle) * dist,
+      life: 1, timer: 90, phase: 0,
+      angle,
     });
   }
 
-  /* ── draw ─────────────────────────────────────────────────────────── */
-  function drawSpace() {
-    ctx.fillStyle = '#050510';
-    ctx.fillRect(0, 0, SIZE, SIZE);
-    // stars
-    const rng = mulberry32(42);
-    for (let i = 0; i < 60; i++) {
-      const sx = rng() * SIZE, sy = rng() * SIZE;
-      const sr = 0.5 + rng();
-      const alpha = 0.4 + rng() * 0.6;
-      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
+  function fireMeteors() {
+    for (let i = 0; i < 15; i++) {
+      setTimeout(() => {
+        if (!running || destroyed) return;
+        const tx   = CX + (Math.random() - 0.5) * PR * 1.4;
+        const startX = CX + (Math.random() - 0.5) * SIZE * 0.8;
+        const dx = tx - startX, dy = SIZE;
+        const len = Math.hypot(dx, dy) || 1;
+        projectiles.push({
+          x: startX, y: -10,
+          vx: (dx / len) * 5.5, vy: (dy / len) * 5.5,
+          weapon: 'meteors', cfg: WEAPON_CFG.meteors,
+          trail: [], isBeam: false, trailX: startX, trailY: -10,
+        });
+      }, i * 120 + Math.random() * 60);
     }
   }
 
-  function drawPlanet(shakeX, shakeY) {
+  function fireSolarFlare() {
+    effects.push({ type: 'solarflare', timer: 45, life: 1 });
+    // Apply many craters along a band after a short delay
+    setTimeout(() => {
+      if (!running || destroyed) return;
+      const cfg = WEAPON_CFG.solarflare;
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.random() - 0.5) * Math.PI * 0.7 + Math.PI; // left side
+        const dist  = PR * (0.3 + Math.random() * 0.65);
+        const hitX  = CX + Math.cos(angle) * dist;
+        const hitY  = CY + Math.sin(angle) * dist;
+        impactPlanet(hitX, hitY, cfg, 'solarflare');
+      }
+      // Light damage
+      hp = Math.max(0, hp - cfg.dmg);
+      shakeTimer = 25; shakeAmt = 12;
+      updateScore();
+    }, 400);
+  }
+
+  function impactPlanet(hitX, hitY, cfg, wType) {
+    craters.push({ x: hitX, y: hitY, r: PR * cfg.craterR, alpha: 1, type: currentPlanetType });
+    burst(hitX, hitY, cfg.col, cfg.pn, cfg.pSpd);
+    if (cfg.shake[0] > 0) { shakeTimer = cfg.shake[0]; shakeAmt = cfg.shake[1] * 0.1; }
+    if (wType === 'nuke') {
+      burst(hitX, hitY, '#fff', 25, 12);
+      burst(hitX, hitY, '#fbbf24', 20, 8);
+    }
+    addChunks(hitX, hitY);
+  }
+
+  /* ══ DRAW ════════════════════════════════════════════════════════════ */
+  function drawSpace() {
+    ctx.fillStyle = '#050510';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    // Static star field (seeded)
+    const rng = mulberry32(77);
+    for (let i = 0; i < 80; i++) {
+      const sx = rng() * SIZE, sy = rng() * SIZE;
+      const sr = 0.4 + rng() * 1.1;
+      const al = 0.3 + rng() * 0.7;
+      ctx.fillStyle = `rgba(255,255,255,${al})`;
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
+    }
+    // Nebula wisps
+    const neb = ctx.createRadialGradient(80, 60, 10, 80, 60, 100);
+    neb.addColorStop(0, 'rgba(80,40,140,0.12)'); neb.addColorStop(1, 'rgba(80,40,140,0)');
+    ctx.fillStyle = neb; ctx.fillRect(0, 0, SIZE, SIZE);
+  }
+
+  function drawPlanet(sx, sy) {
+    ctx.save(); ctx.translate(sx, sy);
+
+    // Clip to circle
     ctx.save();
-    ctx.translate(shakeX, shakeY);
+    ctx.beginPath(); ctx.arc(CX, CY, PR, 0, Math.PI * 2); ctx.clip();
 
-    // draw pre-rendered texture
-    ctx.drawImage(planetOffscreen, 0, 0);
+    // Scrolling planet texture
+    const off = Math.floor(rotOffset) % SIZE;
+    ctx.drawImage(planetOff, -off, 0, SIZE, SIZE, 0, 0, SIZE, SIZE);
+    ctx.drawImage(planetOff, SIZE - off, 0, SIZE, SIZE, 0, 0, SIZE, SIZE);
 
-    // craters
+    // Damage darkness
+    const dmg = 1 - hp / 100;
+    if (dmg > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${dmg * 0.65})`;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+    }
+
+    // Craters
     craters.forEach(c => {
       ctx.globalAlpha = c.alpha;
-      // dark pit
       const cd = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r);
-      cd.addColorStop(0,   'rgba(0,0,0,0.85)');
-      cd.addColorStop(0.6, 'rgba(0,0,0,0.6)');
+      const lavaGlow = c.type === 'lava';
+      cd.addColorStop(0,   lavaGlow ? 'rgba(255,100,0,0.6)'  : 'rgba(0,0,0,0.92)');
+      cd.addColorStop(0.5, lavaGlow ? 'rgba(180,40,0,0.5)'   : 'rgba(0,0,0,0.65)');
+      cd.addColorStop(0.85,'rgba(0,0,0,0.25)');
       cd.addColorStop(1,   'rgba(0,0,0,0)');
       ctx.fillStyle = cd;
       ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
-      // rim highlight
-      ctx.strokeStyle = `rgba(200,180,140,${c.alpha * 0.5})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 0.9, 0, Math.PI * 2); ctx.stroke();
+      // Ejecta rim
+      ctx.globalAlpha = c.alpha * 0.45;
+      ctx.strokeStyle = c.type === 'lava' ? 'rgba(255,160,0,0.7)' : 'rgba(210,195,160,0.7)';
+      ctx.lineWidth = Math.max(1, c.r * 0.12);
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 0.88, 0, Math.PI * 2); ctx.stroke();
+      // Ejecta rays for larger craters
+      if (c.r > 14) {
+        ctx.globalAlpha = c.alpha * 0.18;
+        ctx.strokeStyle = c.type === 'lava' ? '#ff8c00' : '#e8dfc0';
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 8; i++) {
+          const a = (Math.PI * 2 * i) / 8;
+          ctx.beginPath();
+          ctx.moveTo(c.x + Math.cos(a) * c.r * 0.7, c.y + Math.sin(a) * c.r * 0.7);
+          ctx.lineTo(c.x + Math.cos(a) * (c.r * 1.8), c.y + Math.sin(a) * (c.r * 1.8));
+          ctx.stroke();
+        }
+      }
       ctx.globalAlpha = 1;
     });
 
-    // HP overlay (darkens planet as hp drops)
-    const dmg = 1 - hp / 100;
-    ctx.fillStyle = `rgba(0,0,0,${dmg * 0.6})`;
-    ctx.beginPath(); ctx.arc(CX, CY, PLANET_R, 0, Math.PI * 2); ctx.fill();
+    ctx.restore(); // end planet clip
 
-    ctx.restore();
+    // Specular rim light (outside clip so it stays sharp)
+    const rim = ctx.createRadialGradient(CX, CY, PR * 0.94, CX, CY, PR * 1.04);
+    rim.addColorStop(0, 'rgba(255,255,255,0.0)');
+    rim.addColorStop(1, 'rgba(255,255,255,0.1)');
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(CX, CY, PR, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.restore(); // end shake translate
+  }
+
+  function drawEffects() {
+    effects.forEach(ef => {
+      if (ef.type === 'blackhole') {
+        ef.phase += 0.08;
+        // Accretion disc
+        ctx.save();
+        ctx.translate(ef.x, ef.y);
+        ctx.rotate(ef.phase);
+        for (let ring = 0; ring < 3; ring++) {
+          const r = 18 + ring * 8;
+          const alpha = (1 - ring / 3) * ef.life * 0.7;
+          const grad  = ctx.createConicalGradient ? null : null;
+          ctx.strokeStyle = `rgba(${ring===0?'180,80,255':ring===1?'100,40,200':'60,20,140'},${alpha})`;
+          ctx.lineWidth = 4 - ring;
+          ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+        }
+        // Dark core
+        const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+        core.addColorStop(0, `rgba(0,0,0,${ef.life})`);
+        core.addColorStop(0.6, `rgba(30,0,60,${ef.life * 0.8})`);
+        core.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = core;
+        ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+        // Lensing distortion hint
+        ctx.strokeStyle = `rgba(180,100,255,${ef.life * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 0, 26, 10, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+
+      } else if (ef.type === 'solarflare') {
+        const alpha = ef.life * 0.75;
+        const flareGrad = ctx.createConicalGradient
+          ? null
+          : ctx.createRadialGradient(-30, CY, 0, -30, CY, SIZE * 0.9);
+        if (flareGrad) {
+          flareGrad.addColorStop(0, `rgba(255,220,50,${alpha})`);
+          flareGrad.addColorStop(0.3, `rgba(255,140,20,${alpha * 0.6})`);
+          flareGrad.addColorStop(1,   'rgba(255,100,0,0)');
+          ctx.fillStyle = flareGrad;
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(-30, CY);
+          ctx.lineTo(SIZE * 0.6, CY - PR * 0.7);
+          ctx.lineTo(SIZE * 0.6, CY + PR * 0.7);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    });
   }
 
   function drawProjectiles() {
     projectiles.forEach(p => {
-      if (p.laser) {
-        // laser beam from edge
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 3;
-        ctx.shadowColor = '#f87171';
-        ctx.shadowBlur = 10;
-        ctx.globalAlpha = 0.9;
-        ctx.beginPath();
-        ctx.moveTo(p.trailX ?? p.x, p.trailY ?? p.y);
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
+      const w = p.weapon;
+      if (p.isBeam) {
+        const col   = w === 'laser' ? '#ef4444' : '#22d3ee';
+        const glow  = w === 'laser' ? '#f87171' : '#67e8f9';
+        const thick = w === 'laser' ? 3 : 1.5;
+        ctx.save();
+        ctx.shadowColor = glow; ctx.shadowBlur = 14;
+        ctx.strokeStyle = col; ctx.lineWidth = thick; ctx.globalAlpha = 0.92;
+        ctx.beginPath(); ctx.moveTo(p.trailX, p.trailY); ctx.lineTo(p.x, p.y); ctx.stroke();
+        if (w === 'ioncannon') {
+          ctx.lineWidth = 4; ctx.globalAlpha = 0.3;
+          ctx.beginPath(); ctx.moveTo(p.trailX, p.trailY); ctx.lineTo(p.x, p.y); ctx.stroke();
+        }
+        ctx.restore();
       } else {
-        // draw trail
+        // Trail
         p.trail.forEach((pt, i) => {
-          ctx.globalAlpha = (i / p.trail.length) * 0.4;
-          ctx.fillStyle = p.cfg.color;
-          ctx.beginPath(); ctx.arc(pt.x, pt.y, 4 * (i / p.trail.length), 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = (i / p.trail.length) * 0.45;
+          ctx.fillStyle = p.cfg.col;
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 5 * (i / p.trail.length), 0, Math.PI * 2); ctx.fill();
         });
         ctx.globalAlpha = 1;
-
-        // emoji projectile
-        ctx.font = `${p.weapon === 'nuke' ? 26 : p.weapon === 'asteroid' ? 22 : 18}px serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        // Emoji
+        const sz = p.cfg.size;
         ctx.save();
+        ctx.font = `${sz}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const angle = Math.atan2(p.vy, p.vx);
-        ctx.translate(p.x, p.y);
-        ctx.rotate(angle);
+        ctx.translate(p.x, p.y); ctx.rotate(angle);
         ctx.fillText(p.cfg.emoji, 0, 0);
         ctx.restore();
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'alphabetic';
       }
     });
   }
@@ -222,39 +706,54 @@
     particles.forEach(p => {
       ctx.globalAlpha = p.life;
       ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.5, p.r * p.life), 0, Math.PI * 2); ctx.fill();
+    });
+    chunks.forEach(c => {
+      ctx.globalAlpha = c.life;
+      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+      ctx.fillStyle = c.color;
+      ctx.beginPath(); ctx.roundRect(-c.r, -c.r * 0.6, c.r * 2, c.r * 1.2, 3); ctx.fill();
+      ctx.restore();
     });
     ctx.globalAlpha = 1;
   }
 
   function drawHpBar() {
-    const bw = 160, bh = 10, bx = CX - bw / 2, by = CY + PLANET_R + 14;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    const bw = 180, bh = 10;
+    const bx = CX - bw / 2, by = CY + PR + 16;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.fill();
-
-    const pct = hp / 100;
-    const hpGrad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-    hpGrad.addColorStop(0, '#22c55e');
-    hpGrad.addColorStop(0.5, '#eab308');
-    hpGrad.addColorStop(1, '#ef4444');
-    ctx.fillStyle = hpGrad;
-    ctx.beginPath(); ctx.roundRect(bx, by, bw * pct, bh, 5); ctx.fill();
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    const pct = Math.max(0, hp / 100);
+    if (pct > 0) {
+      const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      g.addColorStop(0, '#22c55e'); g.addColorStop(0.5, '#eab308'); g.addColorStop(1, '#ef4444');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.roundRect(bx, by, bw * pct, bh, 5); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 5); ctx.stroke();
+    // label
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`INTEGRITÄT ${Math.ceil(hp)}%`, CX, by + bh + 11);
+    ctx.textAlign = 'left';
   }
 
   function drawDestroyed() {
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillStyle = `rgba(0,0,0,${Math.min(0.75, destroyTimer / 60)})`;
     ctx.fillRect(0, 0, SIZE, SIZE);
+    if (destroyTimer < 20) return;
+    const alpha = Math.min(1, (destroyTimer - 20) / 30);
+    ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 26px sans-serif';
-    ctx.fillText('💥 Zerstört!', CX, CY - 20);
-    ctx.fillStyle = '#fff';
-    ctx.font = '14px sans-serif';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('💥 Zerstört!', CX, CY - 18);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = '13px sans-serif';
     ctx.fillText('Drücke "Neuer Planet"', CX, CY + 14);
+    ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
   }
 
@@ -262,117 +761,161 @@
     scoreEl.textContent = `${100 - Math.round(hp)}%`;
   }
 
-  /* ── update ───────────────────────────────────────────────────────── */
+  /* ══ UPDATE ══════════════════════════════════════════════════════════ */
   function updateProjectiles() {
-    const toRemove = [];
-    projectiles.forEach((p, idx) => {
-      if (p.laser) {
-        p.trailX = p.x; p.trailY = p.y;
-      } else {
-        p.trail.push({ x: p.x, y: p.y });
-        if (p.trail.length > 8) p.trail.shift();
-      }
+    const keep = [];
+    for (const p of projectiles) {
+      if (p.isBeam) { p.trailX = p.x; p.trailY = p.y; }
+      else          { p.trail.push({ x: p.x, y: p.y }); if (p.trail.length > 9) p.trail.shift(); }
       p.x += p.vx; p.y += p.vy;
 
       const dist = Math.hypot(p.x - CX, p.y - CY);
-      if (dist < PLANET_R + 4) {
-        // impact
-        const hitX = p.laser ? p.x : p.x;
-        const hitY = p.laser ? p.y : p.y;
-
-        craters.push({
-          x: hitX, y: hitY,
-          r: PLANET_R * p.cfg.r,
-          alpha: 1
-        });
-
-        burst(hitX, hitY, p.cfg.color, p.cfg.pn, p.weapon === 'nuke' ? 10 : 5);
-
-        if (p.weapon === 'nuke') {
-          shakeTimer = 30; shakeAmt = 12;
-          burst(hitX, hitY, '#fff', 20, 8);
-        } else if (p.weapon === 'asteroid') {
-          shakeTimer = 15; shakeAmt = 6;
-        }
-
+      if (dist < PR + 6) {
+        impactPlanet(p.x, p.y, p.cfg, p.weapon);
         hp = Math.max(0, hp - p.cfg.dmg);
         updateScore();
-        toRemove.push(idx);
-      } else if (p.x < -50 || p.x > SIZE + 50 || p.y < -50 || p.y > SIZE + 50) {
-        toRemove.push(idx);
+      } else if (p.x > -60 && p.x < SIZE + 60 && p.y > -60 && p.y < SIZE + 60) {
+        keep.push(p);
       }
-    });
-    for (let i = toRemove.length - 1; i >= 0; i--) projectiles.splice(toRemove[i], 1);
+    }
+    projectiles = keep;
   }
 
-  /* ── main loop ────────────────────────────────────────────────────── */
+  function updateEffects() {
+    const keep = [];
+    for (const ef of effects) {
+      ef.timer--;
+      ef.life = Math.max(0, ef.timer / (ef.type === 'blackhole' ? 90 : 45));
+
+      if (ef.type === 'blackhole') {
+        // Suck in particles toward black hole each frame
+        if (ef.timer % 6 === 0 && ef.timer > 10) {
+          burst(CX, CY, '#7c3aed', 2, 1.5);
+        }
+        if (ef.timer === 10) {
+          // Final implosion
+          const cfg = WEAPON_CFG.blackhole;
+          impactPlanet(ef.x, ef.y, cfg, 'blackhole');
+          hp = Math.max(0, hp - cfg.dmg);
+          shakeTimer = 40; shakeAmt = 2.0;
+          burst(ef.x, ef.y, '#7c3aed', 40, 12);
+          burst(ef.x, ef.y, '#fff', 20, 10);
+          updateScore();
+        }
+      }
+
+      if (ef.timer > 0) keep.push(ef);
+    }
+    effects = keep;
+  }
+
+  /* ══ MAIN LOOP ═══════════════════════════════════════════════════════ */
   function loop() {
     if (!running) return;
     raf = requestAnimationFrame(loop);
     frame++;
 
     if (shakeTimer > 0) shakeTimer--;
+    rotOffset += 0.18;
 
     let sx = 0, sy = 0;
     if (shakeTimer > 0) {
-      sx = (Math.random() - 0.5) * shakeAmt;
-      sy = (Math.random() - 0.5) * shakeAmt;
+      const amt = shakeAmt * (shakeTimer / 35);
+      sx = (Math.random() - 0.5) * amt * 2;
+      sy = (Math.random() - 0.5) * amt * 2;
     }
 
-    updateProjectiles();
-
-    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vx *= 0.93; p.vy *= 0.93; p.life -= 0.03; });
-    particles = particles.filter(p => p.life > 0);
-
-    drawSpace();
-    if (hp > 0) {
-      drawPlanet(sx, sy);
+    // Update
+    if (!destroyed) {
+      updateProjectiles();
+      updateEffects();
+      if (hp <= 0 && !destroyed) {
+        destroyed = true;
+        addChunks(CX, CY); addChunks(CX, CY); addChunks(CX, CY);
+        burst(CX, CY, '#fbbf24', 60, 14);
+        burst(CX, CY, '#ef4444', 40, 10);
+        burst(CX, CY, '#fff', 20, 16);
+        shakeTimer = 60; shakeAmt = 3;
+      }
     } else {
+      destroyTimer++;
+    }
+
+    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vx *= 0.93; p.vy *= 0.93; p.life -= (p.decay || 0.025); });
+    particles = particles.filter(p => p.life > 0);
+    chunks.forEach(c => { c.x += c.vx; c.y += c.vy; c.vy += 0.06; c.vx *= 0.99; c.rot += c.rotV; c.life -= c.decay; });
+    chunks = chunks.filter(c => c.life > 0);
+
+    // Draw
+    drawSpace();
+    if (!destroyed) {
+      drawPlanet(sx, sy);
+      drawEffects();
+      drawProjectiles();
+      drawParticles();
+      drawHpBar();
+    } else {
+      drawPlanet(sx, sy);
       drawParticles();
       drawDestroyed();
-      return;
     }
-    drawProjectiles();
-    drawParticles();
-    drawHpBar();
   }
 
-  /* ── click/touch ──────────────────────────────────────────────────── */
-  function getCanvasPos(e) {
+  /* ══ INPUT ═══════════════════════════════════════════════════════════ */
+  function getPos(e) {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = SIZE / rect.width;
-    const scaleY = SIZE / rect.height;
-    if (e.touches) {
-      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
-    }
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+    const scX  = SIZE / rect.width, scY = SIZE / rect.height;
+    const src  = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * scX, y: (src.clientY - rect.top) * scY };
   }
+  canvas.addEventListener('click',      e => { const p = getPos(e); fire(p.x, p.y); });
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); const p = getPos(e); fire(p.x, p.y); }, { passive: false });
 
-  canvas.addEventListener('click', e => { const p = getCanvasPos(e); fire(p.x, p.y); });
-  canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    const p = getCanvasPos(e);
-    fire(p.x, p.y);
-  }, { passive: false });
+  /* ── Weapon buttons ───────────────────────────────────────────────── */
+  document.querySelectorAll('.weapon-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.weapon-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      weapon = btn.dataset.weapon;
+    });
+  });
 
-  /* ── init ─────────────────────────────────────────────────────────── */
-  function init() {
+  /* ── Planet picker ────────────────────────────────────────────────── */
+  document.querySelectorAll('.planet-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.planet-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentPlanetType = btn.dataset.planet;
+      initState();
+    });
+  });
+
+  /* ── Reset button ─────────────────────────────────────────────────── */
+  resetBtn.addEventListener('click', initState);
+
+  /* ══ INIT ════════════════════════════════════════════════════════════ */
+  function initState() {
     craters     = [];
     projectiles = [];
     particles   = [];
+    effects     = [];
+    chunks      = [];
     shakeTimer  = 0;
     shakeAmt    = 0;
     hp          = 100;
-    frame       = 0;
+    rotOffset   = 0;
+    destroyed   = false;
+    destroyTimer = 0;
     buildPlanet();
     updateScore();
   }
 
-  /* ── public API ───────────────────────────────────────────────────── */
+  /* ══ PUBLIC API ══════════════════════════════════════════════════════ */
   window.startPlanet = function () {
     if (running) stopPlanet();
     running = true;
-    init();
+    frame   = 0;
+    initState();
     raf = requestAnimationFrame(loop);
   };
 

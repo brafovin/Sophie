@@ -267,12 +267,31 @@ header {
   display: block;
 }
 
-#weapon-bar { display: flex; gap: 10px; }
+#planet-picker {
+  display: flex; gap: 7px; flex-wrap: wrap; justify-content: center;
+  width: 100%;
+}
+.planet-btn {
+  width: 44px; height: 44px; font-size: 1.4rem;
+  background: var(--glass); border: 2px solid var(--glass-border);
+  backdrop-filter: blur(8px); border-radius: 50%;
+  cursor: pointer; transition: transform 0.15s, border-color 0.15s, background 0.15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.planet-btn:hover  { transform: scale(1.12); background: rgba(255,255,255,0.12); }
+.planet-btn.active { border-color: rgba(233,69,96,0.7); background: rgba(233,69,96,0.18); transform: scale(1.12); }
+
+#weapon-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px; width: 100%; max-width: 280px;
+}
 .weapon-btn {
-  width: 54px; height: 54px; font-size: 1.5rem;
+  width: 100%; aspect-ratio: 1; font-size: 1.4rem;
   background: var(--glass); border: 1px solid var(--glass-border);
   backdrop-filter: blur(8px); border-radius: 14px;
   cursor: pointer; transition: transform 0.12s, background 0.12s;
+  display: flex; align-items: center; justify-content: center;
 }
 .weapon-btn:hover { transform: scale(1.1); background: rgba(255,255,255,0.12); }
 .weapon-btn.active { background: rgba(233,69,96,0.25); border-color: rgba(233,69,96,0.5); transform: scale(1.08); }
