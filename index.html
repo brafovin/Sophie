@@ -49,6 +49,11 @@
           <span class="card-name">Breakout</span>
           <span class="card-desc">Zerstöre alle Steine!</span>
         </button>
+        <button class="game-card" id="card-obby">
+          <span class="card-icon">🔥</span>
+          <span class="card-name">Obby Run</span>
+          <span class="card-desc">Lauf! Die Lava steigt!</span>
+        </button>
       </div>
     </div>
   </div>
@@ -197,11 +202,32 @@
     </div>
   </div>
 
+  <!-- ══ Obby Run Screen ══════════════════════════════════════════════ -->
+  <div id="obby-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="obby-back">🏠</button>
+        <h1 class="game-title">Obby<br>Run</h1>
+        <div id="obby-hud">
+          <div class="score-box"><span class="label">Edelsteine</span><span id="obby-score">0</span></div>
+          <div class="score-box"><span class="label">Leben</span><span id="obby-lives">❤️❤️❤️</span></div>
+        </div>
+      </header>
+      <canvas id="obby-canvas"></canvas>
+      <div id="obby-controls">
+        <button class="ctrl-btn" id="ob-left">◀</button>
+        <button class="ctrl-btn" id="ob-jump">▲</button>
+        <button class="ctrl-btn" id="ob-right">▶</button>
+      </div>
+    </div>
+  </div>
+
   <canvas id="drag-canvas"></canvas>
   <script src="game.js"></script>
   <script src="runner.js"></script>
   <script src="planetsmash.js"></script>
   <script src="snake.js"></script>
   <script src="breakout.js"></script>
+  <script src="obby.js"></script>
 </body>
 </html>
