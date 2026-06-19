@@ -16,41 +16,50 @@ function initBg() {
   bgCanvas.width  = window.innerWidth;
   bgCanvas.height = window.innerHeight;
   blobs.length = stars.length = 0;
-  const defs = [[180,30,80],[250,100,30],[60,100,200],[140,30,180],[30,160,140],[220,60,80]];
+  // full rainbow spread, high saturation, each blob slowly drifts its hue
+  const defs = [
+    [0,90,55],[38,95,55],[75,88,48],[150,85,42],[200,92,52],[260,88,50],[300,90,52],[330,92,55]
+  ];
   for (const [h,s,l] of defs) {
     blobs.push({ x:Math.random()*bgCanvas.width, y:Math.random()*bgCanvas.height,
-      r:150+Math.random()*170, vx:(Math.random()-0.5)*0.18, vy:(Math.random()-0.5)*0.18,
-      h,s,l, phase:Math.random()*Math.PI*2 });
+      r:160+Math.random()*200, vx:(Math.random()-0.5)*0.22, vy:(Math.random()-0.5)*0.22,
+      h, hDrift:(Math.random()-0.5)*0.012, s, l, phase:Math.random()*Math.PI*2 });
   }
-  for (let i=0;i<90;i++) stars.push({
+  for (let i=0;i<110;i++) stars.push({
     x:Math.random()*bgCanvas.width, y:Math.random()*bgCanvas.height,
-    r:Math.random()*1.6+0.3, speed:Math.random()*0.22+0.04,
-    opacity:Math.random()*0.55+0.1, hue:Math.random()*80+190,
+    r:Math.random()*2.2+0.4, speed:Math.random()*0.28+0.05,
+    opacity:Math.random()*0.8+0.2, hue:Math.random()*360,
   });
 }
 
 function animateBg(t) {
   const w=bgCanvas.width, h=bgCanvas.height;
   bgCtx.clearRect(0,0,w,h);
-  const bg=bgCtx.createLinearGradient(0,0,w,h);
-  bg.addColorStop(0,'#03030e'); bg.addColorStop(0.5,'#060618'); bg.addColorStop(1,'#03030e');
+  // Colorful base gradient that slowly shifts hue
+  const hShift = t * 0.006;
+  const bg = bgCtx.createLinearGradient(0,0,w,h);
+  bg.addColorStop(0, `hsl(${280+hShift},60%,10%)`);
+  bg.addColorStop(0.35,`hsl(${220+hShift},55%,8%)`);
+  bg.addColorStop(0.65,`hsl(${160+hShift},50%,9%)`);
+  bg.addColorStop(1,   `hsl(${340+hShift},58%,10%)`);
   bgCtx.fillStyle=bg; bgCtx.fillRect(0,0,w,h);
   for (const b of blobs) {
+    b.h = (b.h + b.hDrift + 360) % 360;
     b.x+=b.vx; b.y+=b.vy;
     if (b.x<-b.r) b.x=w+b.r; if (b.x>w+b.r) b.x=-b.r;
     if (b.y<-b.r) b.y=h+b.r; if (b.y>h+b.r) b.y=-b.r;
-    const pulse=0.85+0.15*Math.sin(t*0.0008+b.phase);
+    const pulse=0.82+0.18*Math.sin(t*0.0007+b.phase);
     const rad=bgCtx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*pulse);
-    rad.addColorStop(0,`hsla(${b.h},${b.s}%,${b.l}%,0.18)`);
-    rad.addColorStop(0.5,`hsla(${b.h},${b.s}%,${b.l}%,0.06)`);
-    rad.addColorStop(1,`hsla(${b.h},${b.s}%,${b.l}%,0)`);
+    rad.addColorStop(0,  `hsla(${b.h},${b.s}%,${b.l}%,0.52)`);
+    rad.addColorStop(0.4,`hsla(${b.h},${b.s}%,${b.l}%,0.18)`);
+    rad.addColorStop(1,  `hsla(${b.h},${b.s}%,${b.l}%,0)`);
     bgCtx.fillStyle=rad;
     bgCtx.fillRect(b.x-b.r*pulse,b.y-b.r*pulse,b.r*pulse*2,b.r*pulse*2);
   }
   for (const s of stars) {
-    s.y-=s.speed; if (s.y<-4){s.y=h+4;s.x=Math.random()*w;}
+    s.y-=s.speed; if (s.y<-4){s.y=h+4;s.x=Math.random()*w; s.hue=Math.random()*360;}
     bgCtx.beginPath(); bgCtx.arc(s.x,s.y,s.r,0,Math.PI*2);
-    bgCtx.fillStyle=`hsla(${s.hue},70%,85%,${s.opacity})`; bgCtx.fill();
+    bgCtx.fillStyle=`hsla(${s.hue},90%,88%,${s.opacity})`; bgCtx.fill();
   }
   requestAnimationFrame(animateBg);
 }
