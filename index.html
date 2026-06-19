@@ -29,6 +29,26 @@
           <span class="card-name">Tic Tac Toe</span>
           <span class="card-desc">Drei in einer Reihe gewinnt</span>
         </button>
+        <button class="game-card" id="card-runner">
+          <span class="card-icon">🏃</span>
+          <span class="card-name">Endless Runner</span>
+          <span class="card-desc">Weiche Hindernissen aus!</span>
+        </button>
+        <button class="game-card" id="card-planet">
+          <span class="card-icon">🌍</span>
+          <span class="card-name">Planet Smash</span>
+          <span class="card-desc">Zerstöre den Planeten!</span>
+        </button>
+        <button class="game-card" id="card-snake">
+          <span class="card-icon">🐍</span>
+          <span class="card-name">Snake</span>
+          <span class="card-desc">Friss Äpfel, werde länger</span>
+        </button>
+        <button class="game-card" id="card-breakout">
+          <span class="card-icon">🎯</span>
+          <span class="card-name">Breakout</span>
+          <span class="card-desc">Zerstöre alle Steine!</span>
+        </button>
       </div>
     </div>
   </div>
@@ -37,20 +57,13 @@
   <div id="blockblast-screen" class="screen hidden">
     <div class="screen-inner">
       <header>
-        <button class="back-btn" id="bb-back" title="Zurück zur Spielhalle">🏠</button>
+        <button class="back-btn" id="bb-back">🏠</button>
         <h1 class="game-title">Block<br>Blast</h1>
         <div id="score-area">
-          <div class="score-box">
-            <span class="label">Punkte</span>
-            <span id="score">0</span>
-          </div>
-          <div class="score-box best">
-            <span class="label">Rekord</span>
-            <span id="highscore">0</span>
-          </div>
+          <div class="score-box"><span class="label">Punkte</span><span id="score">0</span></div>
+          <div class="score-box best"><span class="label">Rekord</span><span id="highscore">0</span></div>
         </div>
       </header>
-
       <main id="bb-main">
         <div id="grid-wrapper">
           <canvas id="grid-canvas"></canvas>
@@ -79,36 +92,102 @@
   <div id="tictactoe-screen" class="screen hidden">
     <div class="screen-inner">
       <header>
-        <button class="back-btn" id="ttt-back" title="Zurück zur Spielhalle">🏠</button>
+        <button class="back-btn" id="ttt-back">🏠</button>
         <h1 class="game-title">Tic Tac<br>Toe</h1>
         <div id="ttt-mode-btns">
           <button id="mode-ai" class="mode-btn active">🤖 KI</button>
           <button id="mode-2p" class="mode-btn">👥 2P</button>
         </div>
       </header>
-
       <div id="ttt-scores">
-        <div class="score-box x-box">
-          <span class="label" id="ttt-x-label">Spieler X</span>
-          <span id="ttt-score-x">0</span>
-        </div>
-        <div class="score-box d-box">
-          <span class="label">Remis</span>
-          <span id="ttt-score-d">0</span>
-        </div>
-        <div class="score-box o-box">
-          <span class="label" id="ttt-o-label">Computer</span>
-          <span id="ttt-score-o">0</span>
-        </div>
+        <div class="score-box x-box"><span class="label" id="ttt-x-label">Spieler X</span><span id="ttt-score-x">0</span></div>
+        <div class="score-box d-box"><span class="label">Remis</span><span id="ttt-score-d">0</span></div>
+        <div class="score-box o-box"><span class="label" id="ttt-o-label">Computer</span><span id="ttt-score-o">0</span></div>
       </div>
-
       <div id="ttt-status">Spieler X ist dran</div>
       <canvas id="ttt-canvas"></canvas>
       <button id="ttt-restart" class="action-btn">↺ Neue Runde</button>
     </div>
   </div>
 
+  <!-- ══ Endless Runner Screen ═════════════════════════════════════════ -->
+  <div id="runner-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="runner-back">🏠</button>
+        <h1 class="game-title">Endless<br>Runner</h1>
+        <div class="score-box"><span class="label">Punkte</span><span id="runner-score">0</span></div>
+      </header>
+      <canvas id="runner-canvas"></canvas>
+      <div id="runner-controls">
+        <button id="runner-up" class="ctrl-btn">▲</button>
+        <span class="ctrl-hint">Spur wechseln</span>
+        <button id="runner-down" class="ctrl-btn">▼</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Planet Smash Screen ═══════════════════════════════════════════ -->
+  <div id="planet-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="planet-back">🏠</button>
+        <h1 class="game-title">Planet<br>Smash</h1>
+        <div class="score-box"><span class="label">Zerstörung</span><span id="planet-score">0%</span></div>
+      </header>
+      <canvas id="planet-canvas"></canvas>
+      <div id="weapon-bar">
+        <button class="weapon-btn active" data-weapon="missile" title="Rakete">💣</button>
+        <button class="weapon-btn" data-weapon="laser"    title="Laser">🔴</button>
+        <button class="weapon-btn" data-weapon="asteroid" title="Asteroid">☄️</button>
+        <button class="weapon-btn" data-weapon="nuke"     title="Atombombe">💥</button>
+      </div>
+      <button id="planet-reset" class="action-btn">🌍 Neuer Planet</button>
+    </div>
+  </div>
+
+  <!-- ══ Snake Screen ══════════════════════════════════════════════════ -->
+  <div id="snake-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="snake-back">🏠</button>
+        <h1 class="game-title">Snake</h1>
+        <div class="score-box"><span class="label">Punkte</span><span id="snake-score">0</span></div>
+      </header>
+      <canvas id="snake-canvas"></canvas>
+      <div id="snake-dpad">
+        <div class="dpad-row"><button class="ctrl-btn" id="sn-up">▲</button></div>
+        <div class="dpad-row">
+          <button class="ctrl-btn" id="sn-left">◀</button>
+          <div class="dpad-center">🐍</div>
+          <button class="ctrl-btn" id="sn-right">▶</button>
+        </div>
+        <div class="dpad-row"><button class="ctrl-btn" id="sn-down">▼</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Breakout Screen ═══════════════════════════════════════════════ -->
+  <div id="breakout-screen" class="screen hidden">
+    <div class="screen-inner">
+      <header>
+        <button class="back-btn" id="breakout-back">🏠</button>
+        <h1 class="game-title">Breakout</h1>
+        <div id="breakout-hud">
+          <div class="score-box"><span class="label">Punkte</span><span id="breakout-score">0</span></div>
+          <div class="score-box"><span class="label">Leben</span><span id="breakout-lives">❤️❤️❤️</span></div>
+        </div>
+      </header>
+      <canvas id="breakout-canvas"></canvas>
+      <p class="ctrl-hint" style="text-align:center;margin-top:6px">Maus / Finger zum Steuern</p>
+    </div>
+  </div>
+
   <canvas id="drag-canvas"></canvas>
   <script src="game.js"></script>
+  <script src="runner.js"></script>
+  <script src="planetsmash.js"></script>
+  <script src="snake.js"></script>
+  <script src="breakout.js"></script>
 </body>
 </html>
