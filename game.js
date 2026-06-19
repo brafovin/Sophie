@@ -30,6 +30,7 @@ function initBg() {
     r:Math.random()*2.2+0.4, speed:Math.random()*0.28+0.05,
     opacity:Math.random()*0.8+0.2, hue:Math.random()*360,
   });
+  initSeasonParticles(bgCanvas.width, bgCanvas.height);
 }
 
 function animateBg(t) {
@@ -60,6 +61,16 @@ function animateBg(t) {
     s.y-=s.speed; if (s.y<-4){s.y=h+4;s.x=Math.random()*w; s.hue=Math.random()*360;}
     bgCtx.beginPath(); bgCtx.arc(s.x,s.y,s.r,0,Math.PI*2);
     bgCtx.fillStyle=`hsla(${s.hue},90%,88%,${s.opacity})`; bgCtx.fill();
+  }
+  if (holidayKey) {
+    const ptype = HOLIDAYS[holidayKey].particle;
+    for (const p of seasonParticles) {
+      p.x+=p.vx; p.y+=p.vy; p.rot+=p.rotV;
+      if(p.vy>0&&p.y>h+24){p.y=-24;p.x=Math.random()*w;}
+      if(p.vy<0&&p.y<-24){p.y=h+24;p.x=Math.random()*w;}
+      if(p.x>w+24)p.x=-24; if(p.x<-24)p.x=w+24;
+      drawSeasonParticle(bgCtx,p,ptype);
+    }
   }
   requestAnimationFrame(animateBg);
 }
@@ -467,6 +478,153 @@ document.getElementById('mode-2p').addEventListener('click',()=>tttSetMode(false
 document.getElementById('ttt-restart').addEventListener('click',startTTT);
 
 // ══════════════════════════════════════════════════════════════════════════════
+// HOLIDAY & SEASON SYSTEM
+// ══════════════════════════════════════════════════════════════════════════════
+
+const HOLIDAYS = {
+  christmas: { label:'🎄 Frohe Weihnachten!', c1:'#c41e3a', c2:'#22aa22', particle:'snow'   },
+  newyear:   { label:'🎆 Frohes Neues Jahr!',  c1:'#ffd700', c2:'#e040fb', particle:'spark'  },
+  valentine: { label:'💖 Happy Valentine\'s!', c1:'#ff4081', c2:'#f48fb1', particle:'heart'  },
+  easter:    { label:'🐣 Frohe Ostern!',       c1:'#aed581', c2:'#ff80ab', particle:'egg'    },
+  spring:    { label:'🌸 Schöner Frühling!',   c1:'#f48fb1', c2:'#a5d6a7', particle:'flower' },
+  summer:    { label:'☀️ Schöner Sommer!',     c1:'#ffd740', c2:'#40c4ff', particle:'star'   },
+  halloween: { label:'🎃 Happy Halloween!',    c1:'#ff6d00', c2:'#ab47bc', particle:'bat'    },
+  advent:    { label:'🕯️ Schöne Adventszeit!', c1:'#ffd700', c2:'#ef5350', particle:'star'   },
+};
+
+let holidayKey = null, seasonParticles = [];
+
+function getHoliday() {
+  const d=new Date(), m=d.getMonth()+1, day=d.getDate();
+  if((m===12&&day>=15)||(m===1&&day===1)) return 'christmas';
+  if(m===1&&day<=7)                       return 'newyear';
+  if(m===2&&day>=10&&day<=16)             return 'valentine';
+  if((m===3&&day>=20)||(m===4&&day<=25)) return 'easter';
+  if(m===5&&day<=15)                      return 'spring';
+  if((m===6&&day>=15)||m===7||m===8)     return 'summer';
+  if((m===10&&day>=20)||(m===11&&day===1))return 'halloween';
+  if(m===12)                              return 'advent';
+  return null;
+}
+
+function initSeasonParticles(w, h) {
+  holidayKey = getHoliday();
+  seasonParticles = [];
+  if (!holidayKey) return;
+  const {c1, c2, particle} = HOLIDAYS[holidayKey];
+  const isFall = ['snow','flower','egg','star','spark'].includes(particle);
+  const isRise = particle === 'heart';
+  for (let i=0; i<48; i++) {
+    seasonParticles.push({
+      x: Math.random()*w, y: Math.random()*h,
+      vx: (Math.random()-0.5)*(particle==='bat'?1.2:0.38),
+      vy: isFall ? 0.28+Math.random()*0.7 : isRise ? -(0.28+Math.random()*0.6) : (Math.random()-0.5)*0.5,
+      size: 5+Math.random()*9,
+      alpha: 0.3+Math.random()*0.5,
+      rot: Math.random()*Math.PI*2, rotV:(Math.random()-0.5)*0.022,
+      color: Math.random()<0.55 ? c1 : c2,
+    });
+  }
+}
+
+function drawSeasonParticle(ctx, p, type) {
+  ctx.save();
+  ctx.globalAlpha = p.alpha;
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.rot);
+  const s = p.size;
+  ctx.fillStyle = p.color;
+  ctx.strokeStyle = p.color;
+  switch (type) {
+    case 'snow': {
+      ctx.lineWidth = 1.3;
+      for (let i=0; i<3; i++) {
+        ctx.rotate(Math.PI/3);
+        ctx.strokeStyle = `rgba(200,230,255,${p.alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(-s,0); ctx.lineTo(s,0);
+        ctx.moveTo(-s*0.4,-s*0.38); ctx.lineTo(0,0); ctx.lineTo(-s*0.4,s*0.38);
+        ctx.moveTo( s*0.4,-s*0.38); ctx.lineTo(0,0); ctx.lineTo( s*0.4,s*0.38);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'heart': {
+      ctx.beginPath();
+      ctx.moveTo(0, s*0.25);
+      ctx.bezierCurveTo(-s*0.12,0, -s*0.5,0, -s*0.5,s*0.35);
+      ctx.bezierCurveTo(-s*0.5,s*0.75, 0,s*1.1, 0,s*1.3);
+      ctx.bezierCurveTo(0,s*1.1, s*0.5,s*0.75, s*0.5,s*0.35);
+      ctx.bezierCurveTo(s*0.5,0, s*0.12,0, 0,s*0.25);
+      ctx.fill();
+      break;
+    }
+    case 'star': {
+      ctx.beginPath();
+      for (let i=0; i<8; i++) {
+        const r=i%2===0?s:s*0.38, a=i*Math.PI/4;
+        i===0 ? ctx.moveTo(Math.sin(a)*r,-Math.cos(a)*r)
+              : ctx.lineTo(Math.sin(a)*r,-Math.cos(a)*r);
+      }
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'flower': {
+      for (let i=0; i<5; i++) {
+        ctx.save(); ctx.rotate(i*Math.PI*2/5);
+        ctx.beginPath(); ctx.ellipse(0,-s*0.55,s*0.3,s*0.52,0,0,Math.PI*2);
+        ctx.fill(); ctx.restore();
+      }
+      ctx.fillStyle='#fff9e6';
+      ctx.beginPath(); ctx.arc(0,0,s*0.26,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'egg': {
+      ctx.beginPath(); ctx.ellipse(0,0,s*0.52,s*0.72,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,0.38)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(-s*0.28,-s*0.22); ctx.lineTo(-s*0.08,s*0.12); ctx.stroke();
+      break;
+    }
+    case 'spark': {
+      ctx.shadowColor=p.color; ctx.shadowBlur=10;
+      ctx.beginPath();
+      for (let i=0; i<8; i++) {
+        const r=i%2===0?s:s*0.28, a=i*Math.PI/4;
+        i===0 ? ctx.moveTo(Math.sin(a)*r,-Math.cos(a)*r)
+              : ctx.lineTo(Math.sin(a)*r,-Math.cos(a)*r);
+      }
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'bat': {
+      ctx.fillStyle=`rgba(80,0,120,${p.alpha})`;
+      ctx.beginPath(); ctx.ellipse(0,0,s*0.18,s*0.28,0,0,Math.PI*2); ctx.fill();
+      for (const dir of [-1,1]) {
+        ctx.beginPath();
+        ctx.moveTo(dir*s*0.18,0);
+        ctx.bezierCurveTo(dir*s*0.55,-s*0.5, dir*s,-s*0.1, dir*s*0.55,s*0.35);
+        ctx.bezierCurveTo(dir*s*0.3,s*0.2, dir*s*0.2,s*0.1, dir*s*0.05,0);
+        ctx.fill();
+      }
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function showHolidayBanner() {
+  const el = document.getElementById('holiday-banner');
+  if (!el) return;
+  if (holidayKey && HOLIDAYS[holidayKey]) {
+    const {label, c1, c2} = HOLIDAYS[holidayKey];
+    el.textContent = label;
+    el.style.setProperty('--hc1', c1);
+    el.style.setProperty('--hc2', c2);
+    el.classList.add('visible');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -474,4 +632,5 @@ initBBCanvas();
 initBg();
 requestAnimationFrame(animateBg);
 updateHomeScores();
+showHolidayBanner();
 showScreen('home-screen');
