@@ -1,0 +1,192 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --accent: #e94560;
+  --text: #f0f0f0;
+  --muted: #888;
+  --cell-size: 44px;
+  --gap: 3px;
+  --radius: 8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  width: 100%;
+  max-width: 500px;
+}
+
+header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h1 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+}
+
+#score-area {
+  display: flex;
+  gap: 12px;
+}
+
+.score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  min-width: 80px;
+}
+
+.score-box .label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.score-box span:last-child {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+#grid-wrapper {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+#grid-canvas {
+  display: block;
+  border-radius: 12px;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+#overlay-content {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+#overlay-content h2 {
+  font-size: 2rem;
+  color: var(--accent);
+}
+
+#overlay-content p {
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+
+#overlay-content p strong {
+  color: var(--text);
+}
+
+#restart-btn {
+  padding: 12px 32px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  box-shadow: 0 4px 16px rgba(233, 69, 96, 0.4);
+}
+
+#restart-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 24px rgba(233, 69, 96, 0.6);
+}
+
+#restart-btn:active {
+  transform: scale(0.97);
+}
+
+#piece-tray {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  width: 100%;
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 16px 8px;
+  gap: 8px;
+  min-height: 130px;
+}
+
+.piece-canvas {
+  cursor: grab;
+  border-radius: 4px;
+  transition: transform 0.15s;
+}
+
+.piece-canvas:active {
+  cursor: grabbing;
+}
+
+.piece-canvas.used {
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+@media (max-width: 420px) {
+  :root {
+    --cell-size: 36px;
+    --gap: 2px;
+  }
+  h1 { font-size: 1.4rem; }
+}
