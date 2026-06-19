@@ -183,6 +183,14 @@ main {
   pointer-events: none;
 }
 
+#drag-canvas {
+  position: fixed;
+  pointer-events: none;
+  z-index: 999;
+  display: none;
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,0.55));
+}
+
 @media (max-width: 420px) {
   :root {
     --cell-size: 36px;
